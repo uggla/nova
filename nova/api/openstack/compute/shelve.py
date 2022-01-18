@@ -85,7 +85,12 @@ class ShelveController(wsgi.Controller):
     # In microversion 2.77 we support specifying 'availability_zone' to
     # unshelve a server. But before 2.77 there is no request body
     # schema validation (because of body=null).
-    @validation.schema(shelve_schemas.unshelve_v277, min_version='2.77')
+    @validation.schema(shelve_schemas.unshelve_v277,
+                       min_version='2.77',
+                       max_version='2.90')
+    # In microversion 2.91 we support specifying 'destination_host' to
+    # unshelve a instance.
+    @validation.schema(shelve_schemas.unshelve_v291, min_version='2.91')
     def _unshelve(self, req, id, body):
         """Restore an instance from shelved mode."""
         context = req.environ["nova.context"]
@@ -94,13 +99,24 @@ class ShelveController(wsgi.Controller):
                     target={'project_id': instance.project_id})
 
         new_az = None
+        destination_host = None
         unshelve_dict = body['unshelve']
-        support_az = api_version_request.is_supported(req, '2.77')
-        if support_az and unshelve_dict:
-            new_az = unshelve_dict['availability_zone']
+        support_az = api_version_request.is_supported(
+            req, '2.77')
+        support_destination_host = api_version_request.is_supported(
+            req, '2.91')
+        if unshelve_dict:
+            if support_az:
+                new_az = unshelve_dict['availability_zone']
+            if support_destination_host:
+                destination_host = unshelve_dict['destination_host']
 
+        # TODO(rribaud): Add a policy to only allow admin to unshelve to a
+        # specific host
         try:
-            self.compute_api.unshelve(context, instance, new_az=new_az)
+            self.compute_api.unshelve(context, instance,
+                                      new_az=new_az,
+                                      destination_host=destination_host)
         except (exception.InstanceIsLocked,
                 exception.UnshelveInstanceInvalidState,
                 exception.MismatchVolumeAZException) as e:

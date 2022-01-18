@@ -4369,7 +4369,9 @@ class API:
     @check_instance_lock
     @check_instance_state(vm_state=[vm_states.SHELVED,
         vm_states.SHELVED_OFFLOADED])
-    def unshelve(self, context, instance, new_az=None):
+    def unshelve(self, context, instance,
+                 new_az=None,
+                 destination_host=None):
         """Restore a shelved instance."""
         request_spec = objects.RequestSpec.get_by_instance_uuid(
             context, instance.uuid)
@@ -4392,6 +4394,14 @@ class API:
             # is trying to put the server in the target AZ.
             request_spec.availability_zone = new_az
             request_spec.save()
+
+        if destination_host:
+            LOG.debug("Add requested_destination to %(destination_host)s "
+                      "in RequestSpec",
+                      {"destination_host": destination_host},
+                       instance=instance)
+            request_spec.requested_destination = \
+                       objects.Destination(host=destination_host)
 
         instance.task_state = task_states.UNSHELVING
         instance.save(expected_task_state=[None])

@@ -12,6 +12,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import copy
 from nova.api.validation import parameter_types
 
 # NOTE(brinzhang): For older microversion there will be no change as
@@ -35,3 +36,16 @@ unshelve_v277 = {
     'required': ['unshelve'],
     'additionalProperties': False,
 }
+
+# NOTE(rribaud):
+# schema is applied only for >=2.91 with unshelve a server API
+# add destination_host parameter to specify to unshelve to this specific host
+unshelve_v291 = copy.deepcopy(unshelve_v277)
+unshelve_v291['properties']['unshelve']['properties']['destination_host'] = \
+    parameter_types.fqdn
+# Change the behavior of the api by making availability_zone and
+# destination_host mutually exclusive.
+del unshelve_v291['properties']['unshelve']['required']
+unshelve_v291['properties']['unshelve']['properties'] = \
+    {'oneOf': [{'availability_zone': parameter_types.name},
+               {'destination_host': parameter_types.fqdn}]}
