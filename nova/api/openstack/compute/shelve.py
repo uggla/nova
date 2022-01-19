@@ -107,9 +107,9 @@ class ShelveController(wsgi.Controller):
             req, '2.91')
         if unshelve_dict:
             if support_az:
-                new_az = unshelve_dict['availability_zone']
+                new_az = unshelve_dict.get('availability_zone')
             if support_destination_host:
-                destination_host = unshelve_dict['destination_host']
+                destination_host = unshelve_dict.get('destination_host')
 
         # TODO(rribaud): Add a policy to only allow admin to unshelve to a
         # specific host
