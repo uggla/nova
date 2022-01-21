@@ -4396,12 +4396,24 @@ class API:
             request_spec.save()
 
         if destination_host:
+            # Checking if the host is valid. An exception should rise if it is
+            # not the case.
+            try:
+                compute_node = \
+                    objects.ComputeNode.get_first_node_by_host_for_old_compat(
+                context, destination_host, use_slave=True)
+            # Raise a http status code 400 instead of a 500.
+            except nova.exception.ComputeHostNotFound:
+                msg = _('The requested host "{}" is not found').format(
+                    destination_host)
+                raise exception.InvalidRequest(msg)
+
             LOG.debug("Add requested_destination to %(destination_host)s "
                       "in RequestSpec",
-                      {"destination_host": destination_host},
+                      {"destination_host": compute_node.host},
                        instance=instance)
             request_spec.requested_destination = \
-                       objects.Destination(host=destination_host)
+                       objects.Destination(host=compute_node.host)
 
         instance.task_state = task_states.UNSHELVING
         instance.save(expected_task_state=[None])
