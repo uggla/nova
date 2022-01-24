@@ -79,14 +79,12 @@ class UnshelveJson277Test(test_servers.ServersSampleBase):
 
 
 class UnshelveJson291Test(test_servers.ServersSampleBase):
+    ADMIN_API = True
     sample_dir = "os-shelve"
     microversion = '2.91'
     scenarios = [('v2_91', {'api_major_version': 'v2.1'})]
 
     def _test_server_action(self, uuid, template, action, subs=None):
-        # fake_computes = objects.ComputeNodeList(
-        #     objects=[objects.ComputeNode(host='server01',
-        #                                  hypervisor_hostname='server01')])
         subs = subs or {}
         subs.update({'action': action})
         response = self._do_post('servers/%s/action' % uuid,
@@ -95,9 +93,6 @@ class UnshelveJson291Test(test_servers.ServersSampleBase):
         self.assertEqual('', response.text)
 
     def _test_server_action_invalid(self, uuid, template, action, subs=None):
-        # fake_computes = objects.ComputeNodeList(
-        #     objects=[objects.ComputeNode(host='server01',
-        #                                  hypervisor_hostname='server01')])
         subs = subs or {}
         subs.update({'action': action})
         response = self._do_post('servers/%s/action' % uuid,
@@ -119,7 +114,7 @@ class UnshelveJson291Test(test_servers.ServersSampleBase):
 
     def test_unshelve_with_non_valid_dh(self):
         """Ensure an exception rise if destination_host is invalid and
-        a hppt 400 error
+        a http 400 error
         """
         uuid = self._post_server()
         self._test_server_action(uuid, 'os-shelve', 'shelve')
@@ -138,4 +133,39 @@ class UnshelveJson291Test(test_servers.ServersSampleBase):
                                          hypervisor_hostname='server01')])
         compute_node_get_all_by_host.return_value = fake_computes
         self._test_server_action(uuid, 'os-unshelve-host', 'unshelve',
+                                 subs={'destination_host': 'server01'})
+
+
+class UnshelveJson291NonAdminTest(test_servers.ServersSampleBase):
+    # Use non admin api credentials.
+    ADMIN_API = False
+    sample_dir = "os-shelve"
+    microversion = '2.91'
+    scenarios = [('v2_91', {'api_major_version': 'v2.1'})]
+
+    def _test_server_action_invalid(self, uuid, template, action, subs=None):
+        subs = subs or {}
+        subs.update({'action': action})
+        response = self._do_post('servers/%s/action' % uuid,
+                                 template, subs)
+        self.assertEqual(403, response.status_code)
+        self.assertIn(
+            "Policy doesn\'t allow os_compute_api:os-shelve:unshelve_to_host" +
+            " to be performed.", response.text)
+
+    def _test_server_action(self, uuid, template, action, subs=None):
+        subs = subs or {}
+        subs.update({'action': action})
+        response = self._do_post('servers/%s/action' % uuid,
+                                 template, subs)
+        self.assertEqual(202, response.status_code)
+        self.assertEqual('', response.text)
+
+    def test_unshelve_with_non_valid_dh(self):
+        """Ensure an exception rise if user is not admin.
+        a http 403 error
+        """
+        uuid = self._post_server()
+        self._test_server_action(uuid, 'os-shelve', 'shelve')
+        self._test_server_action_invalid(uuid, 'os-unshelve-host', 'unshelve',
                                  subs={'destination_host': 'server01'})

@@ -111,8 +111,6 @@ class ShelveController(wsgi.Controller):
             if support_destination_host:
                 destination_host = unshelve_dict.get('destination_host')
 
-        # TODO(rribaud): Add a policy to only allow admin to unshelve to a
-        # specific host
         try:
             self.compute_api.unshelve(context, instance,
                                       new_az=new_az,

@@ -73,6 +73,7 @@ from nova.objects import quotas as quotas_obj
 from nova.objects import service as service_obj
 from nova.pci import request as pci_request
 from nova.policies import servers as servers_policies
+from nova.policies import shelve as shelve_policies
 import nova.policy
 from nova import profiler
 from nova import rpc
@@ -4396,6 +4397,11 @@ class API:
             request_spec.save()
 
         if destination_host:
+            # Make sure only admin can unshelve to a specific host.
+            context.can(shelve_policies.POLICY_ROOT % 'unshelve_to_host',
+                        target={'user_id': instance.user_id,
+                                'project_id': instance.project_id})
+
             # Checking if the host is valid. An exception should rise if it is
             # not the case.
             try:
