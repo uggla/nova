@@ -4414,6 +4414,12 @@ class API:
                     destination_host)
                 raise exception.InvalidRequest(msg)
 
+            # Ensure instance is shelve_offlaoded
+            if instance.vm_state != 'shelved_offloaded':
+                msg = _('The instance "{}" status is not shelved_offloaded'
+                        ).format(instance.hostname)
+                raise exception.InvalidRequest(msg)
+
             LOG.debug("Add requested_destination to %(destination_host)s "
                       "in RequestSpec",
                       {"destination_host": compute_node.host},

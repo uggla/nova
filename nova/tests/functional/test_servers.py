@@ -2548,6 +2548,24 @@ class ServerMovingTests(integrated_helpers.ProviderUsageBaseTestCase):
 
         self._delete_and_check_allocations(server)
 
+    def test_shelve_unshelve_to_destination_host_instance_not_offloaded(self):
+        source_hostname = self.compute1.host
+        dest_hostname = self.compute2.host
+        source_rp_uuid = self._get_provider_uuid_by_host(source_hostname)
+
+        server = self._boot_then_shelve_and_check_allocations(
+            source_hostname, source_rp_uuid)
+
+        req = {
+            'unshelve': {'destination_host': dest_hostname}
+        }
+
+        ex = self.assertRaises(client.OpenStackApiException,
+                               self.api.post_server_action,
+                               server['id'], req)
+        self.assertEqual(400, ex.response.status_code)
+        self.assertIn("status is not shelved_offloaded", ex.response.text)
+
     def _shelve_offload_and_check_allocations(self, server, source_rp_uuid):
         req = {
             'shelveOffload': {}
