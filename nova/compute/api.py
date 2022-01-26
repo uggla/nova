@@ -73,6 +73,7 @@ from nova.objects import quotas as quotas_obj
 from nova.objects import service as service_obj
 from nova.pci import request as pci_request
 from nova.policies import servers as servers_policies
+from nova.policies import shelve as shelve_policies
 import nova.policy
 from nova import profiler
 from nova import rpc
@@ -4369,7 +4370,9 @@ class API:
     @check_instance_lock
     @check_instance_state(vm_state=[vm_states.SHELVED,
         vm_states.SHELVED_OFFLOADED])
-    def unshelve(self, context, instance, new_az=None):
+    def unshelve(self, context, instance,
+                 new_az=None,
+                 destination_host=None):
         """Restore a shelved instance."""
         request_spec = objects.RequestSpec.get_by_instance_uuid(
             context, instance.uuid)
@@ -4392,6 +4395,37 @@ class API:
             # is trying to put the server in the target AZ.
             request_spec.availability_zone = new_az
             request_spec.save()
+
+        if destination_host:
+            # Make sure only admin can unshelve to a specific host.
+            context.can(shelve_policies.POLICY_ROOT % 'unshelve_to_host',
+                        target={'user_id': instance.user_id,
+                                'project_id': instance.project_id})
+
+            # Checking if the host is valid. An exception should rise if it is
+            # not the case.
+            try:
+                compute_node = \
+                    objects.ComputeNode.get_first_node_by_host_for_old_compat(
+                context, destination_host, use_slave=True)
+            # Raise a http status code 400 instead of a 500.
+            except nova.exception.ComputeHostNotFound:
+                msg = _('The requested host "{}" is not found').format(
+                    destination_host)
+                raise exception.InvalidRequest(msg)
+
+            # Ensure instance is shelve_offlaoded
+            if instance.vm_state != 'shelved_offloaded':
+                msg = _('The instance "{}" status is not shelved_offloaded'
+                        ).format(instance.hostname)
+                raise exception.InvalidRequest(msg)
+
+            LOG.debug("Add requested_destination to %(destination_host)s "
+                      "in RequestSpec",
+                      {"destination_host": compute_node.host},
+                       instance=instance)
+            request_spec.requested_destination = \
+                       objects.Destination(host=compute_node.host)
 
         instance.task_state = task_states.UNSHELVING
         instance.save(expected_task_state=[None])

@@ -147,11 +147,18 @@ Request
           {"unshelve": null} or {"unshelve": {"availability_zone": <string>}}.
           A request body of {"unshelve": {}} is not allowed.
 
+.. note:: Since microversion 2.91, allowed request body schema are
+          {"unshelve": null} or {"unshelve": {"availability_zone": <string>}}
+          or {"unshelve": {"destination_host": <fqdn>}}.
+          availability_zone and destination_host are mutually exclusive parameters.
+          A request body of {"unshelve": {}} is not allowed.
+
 .. rest_parameters:: parameters.yaml
 
   - server_id: server_id_path
   - unshelve: unshelve
   - availability_zone: availability_zone_unshelve
+  - destination_host: destination_host
 
 |
 
@@ -163,6 +170,11 @@ Request
 **Example Unshelve server (unshelve Action) (v2.77)**
 
 .. literalinclude:: ../../doc/api_samples/os-shelve/v2.77/os-unshelve.json
+   :language: javascript
+
+**Example Unshelve server (unshelve Action) (v2.91)**
+
+.. literalinclude:: ../../doc/api_samples/os-shelve/v2.91/os-unshelve.json
    :language: javascript
 
 

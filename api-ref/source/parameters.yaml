@@ -2374,6 +2374,15 @@ description:
   in: body
   required: true
   type: string
+destination_host:
+  description: |
+    The destination host name. Specifying a destination host is only
+    allowed to admin users and server status must be ``SHELVED_OFFLOADED``
+    otherwise a HTTP 400 (bad request) response is returned.
+  in: body
+  required: false
+  type: string
+  min_version: 2.91
 destination_type:
   description: |
     Defines where the block device mapping will reside. Valid values are:

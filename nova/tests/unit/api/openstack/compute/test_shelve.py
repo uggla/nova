@@ -140,7 +140,8 @@ class UnshelveServerControllerTestV277(test.NoDBTestCase):
                                'unshelve') as mock_unshelve:
             self.controller._unshelve(self.req, fakes.FAKE_UUID, body=body)
         mock_unshelve.assert_called_once_with(
-            self.req.environ['nova.context'], instance, new_az=None)
+            self.req.environ['nova.context'], instance,
+            new_az=None, destination_host=None)
 
     @mock.patch('nova.compute.api.API.unshelve')
     @mock.patch('nova.api.openstack.common.get_instance')
@@ -158,7 +159,8 @@ class UnshelveServerControllerTestV277(test.NoDBTestCase):
                 APIVersionRequest('2.76'))
         self.controller._unshelve(self.req, fakes.FAKE_UUID, body=body)
         mock_unshelve.assert_called_once_with(
-            self.req.environ['nova.context'], instance, new_az=None)
+            self.req.environ['nova.context'], instance,
+            new_az=None, destination_host=None)
 
     @mock.patch('nova.compute.api.API.unshelve')
     @mock.patch('nova.api.openstack.common.get_instance')
@@ -210,3 +212,196 @@ class UnshelveServerControllerTestV277(test.NoDBTestCase):
             self.controller._unshelve, self.req,
             fakes.FAKE_UUID, body=body)
         self.assertIn("Additional properties are not allowed", str(exc))
+
+
+class UnshelveServerControllerTestV291(test.NoDBTestCase):
+    """Server controller test for microversion 2.91
+
+    Add destination_host parameter to unshelve a shelved-offloaded server of
+    2.91 microversion.
+    """
+    wsgi_api_version = '2.91'
+
+    def setUp(self):
+        super(UnshelveServerControllerTestV291, self).setUp()
+        self.mock_neutron_extension_list = self.useFixture(
+            fixtures.MockPatch(
+                'nova.network.neutron.API._refresh_neutron_extensions_cache'
+            )
+        ).mock
+        self.mock_neutron_extension_list.return_value = {'extensions': []}
+        self.controller = shelve_v21.ShelveController()
+        self.req = fakes.HTTPRequest.blank(
+                '/%s/servers/a/action' % fakes.FAKE_PROJECT_ID,
+                use_admin_context=True, version=self.wsgi_api_version)
+
+    def fake_get_instance(self):
+        ctxt = self.req.environ['nova.context']
+        return fake_instance.fake_instance_obj(
+            ctxt, uuid=fakes.FAKE_UUID, vm_state=vm_states.SHELVED_OFFLOADED)
+
+    @mock.patch('nova.api.openstack.common.get_instance')
+    def test_unshelve_with_az_pre_2_91(self, mock_get_instance):
+        """Make sure specifying an AZ before microversion 2.91
+        is still working.
+        """
+        instance = self.fake_get_instance()
+        mock_get_instance.return_value = instance
+
+        body = {
+            'unshelve': {
+                'availability_zone': 'us-east',
+            }}
+        self.req.body = jsonutils.dump_as_bytes(body)
+        self.req.api_version_request = (api_version_request.
+                APIVersionRequest('2.77'))
+        with mock.patch.object(self.controller.compute_api,
+                               'unshelve') as mock_unshelve:
+            self.controller._unshelve(self.req, fakes.FAKE_UUID, body=body)
+        mock_unshelve.assert_called_once_with(
+            self.req.environ['nova.context'], instance,
+            new_az='us-east', destination_host=None)
+
+    @mock.patch('nova.api.openstack.common.get_instance')
+    def test_unshelve_without_parameters_2_91(self, mock_get_instance):
+        """Make sure not specifying parameters with microversion 2.91
+        is working.
+        """
+        instance = self.fake_get_instance()
+        mock_get_instance.return_value = instance
+
+        body = {
+            'unshelve': None
+        }
+        self.req.body = jsonutils.dump_as_bytes(body)
+        self.req.api_version_request = (api_version_request.
+                APIVersionRequest('2.91'))
+        with mock.patch.object(self.controller.compute_api,
+                               'unshelve') as mock_unshelve:
+            self.controller._unshelve(self.req, fakes.FAKE_UUID, body=body)
+        mock_unshelve.assert_called_once_with(
+            self.req.environ['nova.context'], instance,
+            new_az=None, destination_host=None)
+
+    @mock.patch('nova.api.openstack.common.get_instance')
+    def test_unshelve_with_az_2_91(self, mock_get_instance):
+        """Make sure specifying an AZ with microversion 2.91
+        is working.
+        """
+        instance = self.fake_get_instance()
+        mock_get_instance.return_value = instance
+
+        body = {
+            'unshelve': {
+                'availability_zone': 'us-east',
+            }}
+        self.req.body = jsonutils.dump_as_bytes(body)
+        self.req.api_version_request = (api_version_request.
+                APIVersionRequest('2.91'))
+        with mock.patch.object(self.controller.compute_api,
+                               'unshelve') as mock_unshelve:
+            self.controller._unshelve(self.req, fakes.FAKE_UUID, body=body)
+        mock_unshelve.assert_called_once_with(
+            self.req.environ['nova.context'], instance,
+            new_az='us-east', destination_host=None)
+
+    @mock.patch('nova.api.openstack.common.get_instance')
+    def test_unshelve_with_dh_2_91(self, mock_get_instance):
+        """Make sure specifying a destination_host with microversion 2.91
+        is working.
+        """
+        instance = self.fake_get_instance()
+        mock_get_instance.return_value = instance
+
+        body = {
+            'unshelve': {
+                'destination_host': 'server02',
+            }}
+        self.req.body = jsonutils.dump_as_bytes(body)
+        self.req.api_version_request = (api_version_request.
+                APIVersionRequest('2.91'))
+        with mock.patch.object(self.controller.compute_api,
+                               'unshelve') as mock_unshelve:
+            self.controller._unshelve(self.req, fakes.FAKE_UUID, body=body)
+        mock_unshelve.assert_called_once_with(
+            self.req.environ['nova.context'], instance,
+            new_az=None, destination_host='server02')
+
+    @mock.patch('nova.compute.api.API.unshelve')
+    @mock.patch('nova.api.openstack.common.get_instance')
+    def test_unshelve_with_az_and_dh_with_v2_91_failed(
+            self, mock_get_instance, mock_unshelve):
+        """Ensure availability_zone and destination_host are
+        mutually exclusive.
+        """
+        instance = self.fake_get_instance()
+        mock_get_instance.return_value = instance
+
+        body = {
+            'unshelve': {
+                'availability_zone': 'us-east',
+                'destination_host': 'server01',
+            }}
+        self.req.body = jsonutils.dump_as_bytes(body)
+        exc = self.assertRaises(exception.ValidationError,
+                                self.controller._unshelve,
+                                self.req, fakes.FAKE_UUID,
+                                body=body)
+        self.assertIn("Invalid input for field/attribute unshelve.", str(exc))
+
+    def test_invalid_az_name_with_int(self):
+        body = {
+            'unshelve': {
+                'destination_host': 1234
+            }}
+        self.req.body = jsonutils.dump_as_bytes(body)
+        self.assertRaises(exception.ValidationError,
+                          self.controller._unshelve,
+                          self.req, fakes.FAKE_UUID,
+                          body=body)
+
+    def test_no_az_value(self):
+        body = {
+            'unshelve': {
+                'destination_host': None
+            }}
+        self.req.body = jsonutils.dump_as_bytes(body)
+        self.assertRaises(exception.ValidationError,
+                          self.controller._unshelve,
+                          self.req, fakes.FAKE_UUID,
+                          body=body)
+
+    def test_invalid_dh_fqdn_with_int(self):
+        body = {
+            'unshelve': {
+                'destination_host': 1234
+            }}
+        self.req.body = jsonutils.dump_as_bytes(body)
+        self.assertRaises(exception.ValidationError,
+                          self.controller._unshelve,
+                          self.req, fakes.FAKE_UUID,
+                          body=body)
+
+    def test_no_destination_host(self):
+        body = {
+            'unshelve': {
+                'destination_host': None
+            }}
+        self.req.body = jsonutils.dump_as_bytes(body)
+        self.assertRaises(exception.ValidationError,
+                          self.controller._unshelve,
+                          self.req, fakes.FAKE_UUID,
+                          body=body)
+
+    def test_unshelve_with_additional_param(self):
+        body = {
+            'unshelve': {
+                'destination_host': 'server01',
+                'additional_param': 1
+            }}
+        self.req.body = jsonutils.dump_as_bytes(body)
+        exc = self.assertRaises(
+            exception.ValidationError,
+            self.controller._unshelve, self.req,
+            fakes.FAKE_UUID, body=body)
+        self.assertIn("Invalid input for field/attribute unshelve.", str(exc))
