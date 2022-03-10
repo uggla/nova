@@ -307,7 +307,7 @@ class _VirtDriverTestCase(_FakeDriverBackendTestCase):
     @catch_notimplementederror
     def test_power_off(self):
         instance_ref, network_info = self._get_running_instance()
-        self.connection.power_off(instance_ref)
+        self.connection.power_off(self.ctxt, instance_ref)
 
     @catch_notimplementederror
     def test_power_on_running(self):
@@ -318,7 +318,7 @@ class _VirtDriverTestCase(_FakeDriverBackendTestCase):
     @catch_notimplementederror
     def test_power_on_powered_off(self):
         instance_ref, network_info = self._get_running_instance()
-        self.connection.power_off(instance_ref)
+        self.connection.power_off(self.ctxt, instance_ref)
         self.connection.power_on(self.ctxt, instance_ref, network_info, None)
 
     @catch_notimplementederror
@@ -456,7 +456,7 @@ class _VirtDriverTestCase(_FakeDriverBackendTestCase):
             "serial": "fake_serial",
             "data": {}
         }
-        self.connection.power_off(instance_ref)
+        self.connection.power_off(self.ctxt, instance_ref)
         self.connection.attach_volume(None, connection_info, instance_ref,
                                       '/dev/sda')
 

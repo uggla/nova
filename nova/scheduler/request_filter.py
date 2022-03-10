@@ -273,6 +273,36 @@ def accelerators_filter(ctxt, request_spec):
 
 
 @trace_request_filter
+def virtio_fs_filter(ctxt, request_spec):
+    """Allow only compute nodes with virtio_fs support.
+
+    This filter retains only nodes whose compute manager published the
+    COMPUTE_STORAGE_VIRTIO_FS trait.
+    """
+    trait_name = os_traits.COMPUTE_STORAGE_VIRTIO_FS
+    if request_spec.flavor.extra_specs.get('virtio_fs'):
+        request_spec.root_required.add(trait_name)
+        LOG.debug('virtio_fs_filter request filter added required '
+                  'trait %s', trait_name)
+    return True
+
+
+@trace_request_filter
+def mem_backing_file_filter(ctxt, request_spec):
+    """Allow only compute nodes with mem_backing_file support.
+
+    This filter retains only nodes whose compute manager published the
+    COMPUTE_MEM_BACKING_FILE trait.
+    """
+    trait_name = os_traits.COMPUTE_MEM_BACKING_FILE
+    if request_spec.flavor.extra_specs.get('mem_backing_file'):
+        request_spec.root_required.add(trait_name)
+        LOG.debug('mem_backing_file_filter request filter added required '
+                  'trait %s', trait_name)
+    return True
+
+
+@trace_request_filter
 def routed_networks_filter(
     ctxt: nova_context.RequestContext,
     request_spec: 'objects.RequestSpec'
@@ -404,6 +434,8 @@ ALL_REQUEST_FILTERS = [
     accelerators_filter,
     routed_networks_filter,
     remote_managed_ports_filter,
+    virtio_fs_filter,
+    mem_backing_file_filter,
 ]
 
 

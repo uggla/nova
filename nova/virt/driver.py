@@ -127,6 +127,8 @@ CAPABILITY_TRAITS_MAP = {
     "supports_socket_pci_numa_affinity":
         os_traits.COMPUTE_SOCKET_PCI_NUMA_AFFINITY,
     "supports_remote_managed_ports": os_traits.COMPUTE_REMOTE_MANAGED_PORTS,
+    "supports_virtio_fs": os_traits.COMPUTE_STORAGE_VIRTIO_FS,
+    "supports_mem_backing_file": os_traits.COMPUTE_MEM_BACKING_FILE,
 }
 
 
@@ -196,6 +198,8 @@ class ComputeDriver(object):
         "supports_secure_boot": False,
         "supports_socket_pci_numa_affinity": False,
         "supports_remote_managed_ports": False,
+        "supports_virtio_fs": False,
+        "supports_mem_backing_file": False,
 
         # Image type support flags
         "supports_image_type_aki": False,
@@ -885,7 +889,8 @@ class ComputeDriver(object):
         """
         raise NotImplementedError()
 
-    def power_off(self, instance, timeout=0, retry_interval=0):
+    def power_off(self, context, instance, timeout=0, retry_interval=0,
+            share_info=None):
         """Power off the specified instance.
 
         :param instance: nova.objects.instance.Instance
@@ -896,7 +901,7 @@ class ComputeDriver(object):
         raise NotImplementedError()
 
     def power_on(self, context, instance, network_info,
-                 block_device_info=None, accel_info=None):
+                 block_device_info=None, accel_info=None, share_info=None):
         """Power on the specified instance.
 
         :param instance: nova.objects.instance.Instance
@@ -904,6 +909,7 @@ class ComputeDriver(object):
         :param block_device_info: instance volume block device info
         :param accel_info: List of accelerator request dicts. The exact
             data struct is doc'd in nova/virt/driver.py::spawn().
+        :param share_info: intance share attached list.
         """
         raise NotImplementedError()
 

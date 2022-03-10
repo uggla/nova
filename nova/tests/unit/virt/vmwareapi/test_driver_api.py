@@ -1393,7 +1393,7 @@ class VMwareAPIVMTestCase(test.NoDBTestCase,
         self._create_vm()
         info = self._get_info()
         self._check_vm_info(info, power_state.RUNNING)
-        self.conn.power_off(self.instance)
+        self.conn.power_off(self.context, self.instance)
         info = self._get_info()
         self._check_vm_info(info, power_state.SHUTDOWN)
         self.conn.power_on(self.context, self.instance, self.network_info)
@@ -1409,14 +1409,14 @@ class VMwareAPIVMTestCase(test.NoDBTestCase,
         self._create_vm()
         info = self._get_info()
         self._check_vm_info(info, power_state.RUNNING)
-        self.conn.power_off(self.instance)
+        self.conn.power_off(self.context, self.instance)
         info = self._get_info()
         self._check_vm_info(info, power_state.SHUTDOWN)
 
     def test_power_off_non_existent(self):
         self._create_instance()
         self.assertRaises(exception.InstanceNotFound, self.conn.power_off,
-                          self.instance)
+                          self.context, self.instance)
 
     @mock.patch.object(driver.VMwareVCDriver, 'reboot')
     @mock.patch.object(vm_util, 'get_vm_state',

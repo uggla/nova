@@ -257,8 +257,8 @@ class HyperVDriverTestCase(test_base.HyperVBaseTestCase):
 
     def test_power_off(self):
         self.driver.power_off(
-            mock.sentinel.instance, mock.sentinel.timeout,
-            mock.sentinel.retry_interval)
+            mock.sentinel.context, mock.sentinel.instance,
+            mock.sentinel.timeout, mock.sentinel.retry_interval)
 
         self.driver._vmops.power_off.assert_called_once_with(
             mock.sentinel.instance, mock.sentinel.timeout,

@@ -146,19 +146,22 @@ class ShelveComputeManagerTestCase(test_compute.BaseTestCase):
 
         if clean_shutdown:
             if guest_power_state == power_state.PAUSED:
-                mock_power_off_call_list.append(mock.call(instance, 0, 0))
+                mock_power_off_call_list.append(
+                        mock.call(self.context, instance, 0, 0, None))
             else:
                 mock_power_off_call_list.append(
-                    mock.call(instance, CONF.shutdown_timeout,
-                              CONF.compute.shutdown_retry_interval))
+                    mock.call(self.context, instance, CONF.shutdown_timeout,
+                              CONF.compute.shutdown_retry_interval, None))
         else:
-            mock_power_off_call_list.append(mock.call(instance, 0, 0))
+            mock_power_off_call_list.append(mock.call(self.context,
+                instance, 0, 0, None))
 
         if CONF.shelved_offload_time == 0:
             mock_notify_instance_usage_call_list.extend([
                 mock.call(self.context, instance, 'shelve_offload.start'),
                 mock.call(self.context, instance, 'shelve_offload.end')])
-            mock_power_off_call_list.append(mock.call(instance, 0, 0))
+            mock_power_off_call_list.append(
+                mock.call(self.context, instance, 0, 0, None))
             mock_get_power_state_call_list.append(mock.call(instance))
 
         mock_notify_instance_usage.assert_has_calls(
@@ -199,13 +202,14 @@ class ShelveComputeManagerTestCase(test_compute.BaseTestCase):
     @mock.patch.object(nova.virt.fake.SmallFakeDriver, 'power_off')
     def test_shelve_offload(self, mock_power_off):
         instance = self._shelve_offload()
-        mock_power_off.assert_called_once_with(instance,
-            CONF.shutdown_timeout, CONF.compute.shutdown_retry_interval)
+        mock_power_off.assert_called_once_with(self.context, instance,
+            CONF.shutdown_timeout, CONF.compute.shutdown_retry_interval, None)
 
     @mock.patch.object(nova.virt.fake.SmallFakeDriver, 'power_off')
     def test_shelve_offload_forced_shutdown(self, mock_power_off):
         instance = self._shelve_offload(clean_shutdown=False)
-        mock_power_off.assert_called_once_with(instance, 0, 0)
+        mock_power_off.assert_called_once_with(self.context, instance,
+                0, 0, None)
 
     @mock.patch.object(compute_utils, 'EventReporter')
     @mock.patch.object(objects.BlockDeviceMappingList, 'get_by_instance_uuid')

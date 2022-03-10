@@ -83,6 +83,8 @@ class PowerVMDriver(driver.ComputeDriver):
             'supports_secure_boot': False,
             'supports_socket_pci_numa_affinity': False,
             'supports_remote_managed_ports': False,
+            "supports_virtio_fs": False,
+            "supports_mem_backing_file": False,
 
             # Supported image types
             "supports_image_type_aki": False,
@@ -462,7 +464,8 @@ class PowerVMDriver(driver.ComputeDriver):
         # Run the flow.
         tf_base.run(flow, instance=instance)
 
-    def power_off(self, instance, timeout=0, retry_interval=0):
+    def power_off(self, context, instance, timeout=0, retry_interval=0,
+            share_info=None):
         """Power off the specified instance.
 
         :param instance: nova.objects.instance.Instance
@@ -477,7 +480,7 @@ class PowerVMDriver(driver.ComputeDriver):
                      timeout=timeout)
 
     def power_on(self, context, instance, network_info,
-                 block_device_info=None, accel_info=None):
+                 block_device_info=None, accel_info=None, share_info=None):
         """Power on the specified instance.
 
         :param instance: nova.objects.instance.Instance
