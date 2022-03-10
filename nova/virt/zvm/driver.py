@@ -49,6 +49,8 @@ class ZVMDriver(driver.ComputeDriver):
         "supports_remote_managed_ports": False,
         "supports_address_space_passthrough": False,
         "supports_address_space_emulated": False,
+        "supports_virtio_fs": False,
+        "supports_mem_backing_file": False,
 
         # Image type support flags
         "supports_image_type_aki": False,
@@ -389,7 +391,8 @@ class ZVMDriver(driver.ComputeDriver):
 
         LOG.debug("Snapshot image upload complete", instance=instance)
 
-    def power_off(self, instance, timeout=0, retry_interval=0):
+    def power_off(self, context, instance, timeout=0, retry_interval=0,
+            share_info=None):
         if timeout >= 0 and retry_interval > 0:
             self._hypervisor.guest_softstop(instance.name, timeout=timeout,
                                             retry_interval=retry_interval)
@@ -397,7 +400,7 @@ class ZVMDriver(driver.ComputeDriver):
             self._hypervisor.guest_softstop(instance.name)
 
     def power_on(self, context, instance, network_info,
-                 block_device_info=None, accel_info=None):
+                 block_device_info=None, accel_info=None, share_info=None):
         self._hypervisor.guest_start(instance.name)
 
     def pause(self, instance):

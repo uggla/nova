@@ -162,6 +162,8 @@ class IronicDriver(virt_driver.ComputeDriver):
         "supports_remote_managed_ports": False,
         "supports_address_space_passthrough": False,
         "supports_address_space_emulated": False,
+        "supports_virtio_fs": False,
+        "supports_mem_backing_file": False,
 
         # Image type support flags
         "supports_image_type_aki": False,
@@ -1382,6 +1384,8 @@ class IronicDriver(virt_driver.ComputeDriver):
             encountered. Ignored by this driver.
         :param accel_info: List of accelerator request dicts. The exact
             data struct is doc'd in nova/virt/driver.py::spawn().
+        :param share_info: share mapping information used to mount Manila
+            shares on the compute and then on the instance using virtiofs.
         """
         LOG.debug('Reboot(type %s) called for instance',
                   reboot_type, instance=instance)
@@ -1412,7 +1416,8 @@ class IronicDriver(virt_driver.ComputeDriver):
                   'node': node.id},
                  instance=instance)
 
-    def power_off(self, instance, timeout=0, retry_interval=0):
+    def power_off(self, context, instance, timeout=0, retry_interval=0,
+            share_info=None):
         """Power off the specified instance.
 
         NOTE: Unlike the libvirt driver, this method does not delete
@@ -1474,7 +1479,7 @@ class IronicDriver(virt_driver.ComputeDriver):
                  node.id, instance=instance)
 
     def power_on(self, context, instance, network_info,
-                 block_device_info=None, accel_info=None):
+                 block_device_info=None, accel_info=None, share_info=None):
         """Power on the specified instance.
 
         NOTE: Unlike the libvirt driver, this method does not delete
@@ -1488,6 +1493,7 @@ class IronicDriver(virt_driver.ComputeDriver):
             information. Ignored by this driver.
         :param accel_info: List of accelerator requests for this instance.
                            Ignored by this driver.
+        :param share_info: instance share attached list.
         """
         LOG.debug('Power on called for instance', instance=instance)
         node = self._validate_instance_and_node(instance)

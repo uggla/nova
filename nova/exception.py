@@ -716,6 +716,11 @@ class ShareProtocolUnknown(NotFound):
     msg_fmt = _("Share protocol %(share_proto)s is unknown.")
 
 
+class ShareError(NovaException):
+    msg_fmt = _("Share %(share_id)s used by instance %(instance_uuid)s "
+                "is in error state.")
+
+
 class ShareUmountError(NovaException):
     msg_fmt = _("Share id %(share_id)s umount error "
                 "from server %(server_id)s.\n"

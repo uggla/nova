@@ -129,6 +129,7 @@ from nova.virt.libvirt import utils as libvirt_utils
 from nova.virt.libvirt import vif as libvirt_vif
 from nova.virt.libvirt.volume import fs
 from nova.virt.libvirt.volume import mount
+from nova.virt.libvirt.volume import nfs
 from nova.virt.libvirt.volume import remotefs
 from nova.virt.libvirt.volume import volume
 from nova.virt import netutils
@@ -734,8 +735,6 @@ class LibvirtDriver(driver.ComputeDriver):
 
         self._supported_perf_events = self._get_supported_perf_events()
 
-        self._check_file_backed_memory_support()
-
         self._check_my_ip()
 
         # TODO(ykarel) This can be dropped when MIN_LIBVIRT_VERSION>=8.0.0
@@ -847,7 +846,9 @@ class LibvirtDriver(driver.ComputeDriver):
         self.capabilities.update({
             'supports_secure_boot': self._host.supports_secure_boot,
             'supports_remote_managed_ports':
-            self._host.supports_remote_managed_ports
+            self._host.supports_remote_managed_ports,
+            'supports_virtio_fs': self._host.supports_virtio_fs,
+            'supports_mem_backing_file': self._host.supports_mem_backing_file
         })
 
         supports_maxphysaddr = self._host.has_min_version(
@@ -1117,45 +1118,6 @@ class LibvirtDriver(driver.ComputeDriver):
                             'type': dev_info['type']})
                     raise exception.InvalidLibvirtMdevConfig(reason=msg)
                 self._create_new_mediated_device(parent, uuid=mdev_uuid)
-
-    def _check_file_backed_memory_support(self):
-        if not CONF.libvirt.file_backed_memory:
-            return
-
-        # file_backed_memory is only compatible with qemu/kvm virts
-        if CONF.libvirt.virt_type not in ("qemu", "kvm"):
-            raise exception.InternalError(
-                _('Running Nova with file_backed_memory and virt_type '
-                  '%(type)s is not supported. file_backed_memory is only '
-                  'supported with qemu and kvm types.') %
-                {'type': CONF.libvirt.virt_type})
-
-        # file-backed memory doesn't work with memory overcommit.
-        # Block service startup if file-backed memory is enabled and
-        # ram_allocation_ratio is not 1.0
-        if CONF.ram_allocation_ratio != 1.0:
-            raise exception.InternalError(
-                'Running Nova with file_backed_memory requires '
-                'ram_allocation_ratio configured to 1.0')
-
-        if CONF.reserved_host_memory_mb:
-            # this is a hard failure as placement won't allow total < reserved
-            if CONF.reserved_host_memory_mb >= CONF.libvirt.file_backed_memory:
-                msg = _(
-                    "'[libvirt] file_backed_memory', which represents total "
-                    "memory reported to placement, must be greater than "
-                    "reserved memory configured via '[DEFAULT] "
-                    "reserved_host_memory_mb'"
-                )
-                raise exception.InternalError(msg)
-
-            # TODO(stephenfin): Change this to an exception in W or later
-            LOG.warning(
-                "Reserving memory via '[DEFAULT] reserved_host_memory_mb' "
-                "is not compatible with file-backed memory. Consider "
-                "setting '[DEFAULT] reserved_host_memory_mb' to 0. This will "
-                "be an error in a future release."
-            )
 
     def _check_my_ip(self):
         ips = compute_utils.get_machine_ips()
@@ -3959,7 +3921,7 @@ class LibvirtDriver(driver.ComputeDriver):
         return False
 
     def _hard_reboot(self, context, instance, network_info,
-                     block_device_info=None, accel_info=None):
+                     block_device_info=None, accel_info=None, share_info=None):
         """Reboot a virtual machine, given an instance reference.
 
         Performs a Libvirt reset (if supported) on the domain.
@@ -3968,6 +3930,8 @@ class LibvirtDriver(driver.ComputeDriver):
         re-creates the domain to ensure the reboot happens, as the guest
         OS cannot ignore this action.
         """
+        if share_info is None:
+            share_info = objects.ShareMappingList()
         # NOTE(sbauza): Since we undefine the guest XML when destroying, we
         # need to remember the existing mdevs for reusing them.
         mdevs = self._get_all_assigned_mediated_devices(instance)
@@ -3999,10 +3963,12 @@ class LibvirtDriver(driver.ComputeDriver):
         #             regenerate raw backend images, however, so when it
         #             does we need to (re)generate the xml after the images
         #             are in place.
+
         xml = self._get_guest_xml(context, instance, network_info, disk_info,
                                   instance.image_meta,
                                   block_device_info=block_device_info,
-                                  mdevs=mdevs, accel_info=accel_info)
+                                  mdevs=mdevs, accel_info=accel_info,
+                                  share_info=share_info)
 
         # NOTE(mdbooth): context.auth_token will not be set when we call
         #                _hard_reboot from resume_state_on_host_boot()
@@ -4041,6 +4007,8 @@ class LibvirtDriver(driver.ComputeDriver):
                 if vif['vnic_type'] in event_expected_for_vnic_types
             ]
             vifs_already_plugged = False
+
+        share_info.activate_all()
 
         # NOTE(efried): The instance should already have a vtpm_secret_uuid
         # registered if appropriate.
@@ -4148,20 +4116,84 @@ class LibvirtDriver(driver.ComputeDriver):
                  timeout, instance=instance)
         return False
 
-    def power_off(self, instance, timeout=0, retry_interval=0):
+    def power_off(
+        self, context, instance, timeout=0, retry_interval=0, share_info=None
+    ):
         """Power off the specified instance."""
+        if share_info is None:
+            share_info = objects.ShareMappingList()
+
         if timeout:
             self._clean_shutdown(instance, timeout, retry_interval)
         self._destroy(instance)
 
+        share_info.deactivate_all()
+
     def power_on(self, context, instance, network_info,
-                 block_device_info=None, accel_info=None):
+                 block_device_info=None, accel_info=None, share_info=None):
         """Power on the specified instance."""
         # We use _hard_reboot here to ensure that all backing files,
         # network, and block device connections, etc. are established
         # and available before we attempt to start the instance.
         self._hard_reboot(context, instance, network_info, block_device_info,
-                          accel_info)
+                          accel_info, share_info)
+
+    def _get_share_driver_manager(self, host, protocol):
+        if protocol == fields.ShareMappingProto.NFS:
+            return nfs.LibvirtNFSVolumeDriver(host)
+        elif protocol == fields.ShareMappingProto.CEPHFS:
+            raise NotImplementedError()
+        else:
+            raise exception.ShareProtocolUnknown(share_proto=protocol)
+
+    def _get_share_connection_info(self, share_mapping):
+        connection_info = {'data': {'export': share_mapping.export_location,
+                                    'name': share_mapping.share_id}}
+        return connection_info
+
+    def _get_share_mount_path(self, instance, share_mapping):
+        drv = self._get_share_driver_manager(
+            instance.host, share_mapping.share_proto)
+
+        mount_path = drv._get_mount_path(
+                self._get_share_connection_info(share_mapping))
+        return mount_path
+
+    def mount_share(self, context, instance, share_mapping):
+        drv = self._get_share_driver_manager(
+            instance.host, share_mapping.share_proto)
+
+        try:
+            drv.connect_volume(
+                self._get_share_connection_info(share_mapping),
+                instance
+            )
+        except processutils.ProcessExecutionError as exc:
+            share_mapping.status = fields.ShareMappingStatus.ERROR
+            share_mapping.save()
+            raise exception.ShareMountError(
+                share_id=share_mapping.share_id,
+                server_id=share_mapping.instance_uuid,
+                reason=exc
+            )
+
+    def umount_share(self, context, instance, share_mapping):
+        drv = self._get_share_driver_manager(
+            instance.host, share_mapping.share_proto)
+
+        try:
+            return drv.disconnect_volume(
+                self._get_share_connection_info(share_mapping),
+                instance
+            )
+        except processutils.ProcessExecutionError as exc:
+            share_mapping.status = fields.ShareMappingStatus.ERROR
+            share_mapping.save()
+            raise exception.ShareUmountError(
+                share_id=share_mapping.share_id,
+                server_id=share_mapping.instance_uuid,
+                reason=exc
+            )
 
     def trigger_crash_dump(self, instance):
         """Trigger crash dump by injecting an NMI to the specified instance."""
@@ -7029,7 +7061,8 @@ class LibvirtDriver(driver.ComputeDriver):
 
     def _get_guest_config(self, instance, network_info, image_meta,
                           disk_info, rescue=None, block_device_info=None,
-                          context=None, mdevs=None, accel_info=None):
+                          context=None, mdevs=None, accel_info=None,
+                          share_info=None):
         """Get config data for parameters.
 
         :param rescue: optional dictionary that should contain the key
@@ -7038,6 +7071,7 @@ class LibvirtDriver(driver.ComputeDriver):
 
         :param mdevs: optional list of mediated devices to assign to the guest.
         :param accel_info: optional list of accelerator requests (ARQs)
+        :param share_info: optional list of share_mapping
         """
         flavor = instance.flavor
         inst_path = libvirt_utils.get_instance_path(instance)
@@ -7159,6 +7193,8 @@ class LibvirtDriver(driver.ComputeDriver):
                          ah_types_set.difference(supported_types_set))
 
         self._guest_add_accel_pci_devices(guest, pci_arq_list)
+
+        self._guest_add_virtiofs_for_share(guest, instance, share_info)
 
         self._guest_add_watchdog_action(guest, flavor, image_meta)
 
@@ -7577,7 +7613,8 @@ class LibvirtDriver(driver.ComputeDriver):
     def _get_guest_xml(self, context, instance, network_info, disk_info,
                        image_meta, rescue=None,
                        block_device_info=None,
-                       mdevs=None, accel_info=None):
+                       mdevs=None, accel_info=None,
+                       share_info=None):
         # NOTE(danms): Stringifying a NetworkInfo will take a lock. Do
         # this ahead of time so that we don't acquire it while also
         # holding the logging lock.
@@ -7586,16 +7623,18 @@ class LibvirtDriver(driver.ComputeDriver):
                'network_info=%(network_info)s '
                'disk_info=%(disk_info)s '
                'image_meta=%(image_meta)s rescue=%(rescue)s '
-               'block_device_info=%(block_device_info)s' %
+               'block_device_info=%(block_device_info)s'
+               'share_info=%(share_info)s' %
                {'network_info': network_info_str, 'disk_info': disk_info,
                 'image_meta': image_meta, 'rescue': rescue,
-                'block_device_info': block_device_info})
+                'block_device_info': block_device_info,
+                'share_info': share_info, })
         # NOTE(mriedem): block_device_info can contain auth_password so we
         # need to sanitize the password in the message.
         LOG.debug(strutils.mask_password(msg), instance=instance)
         conf = self._get_guest_config(instance, network_info, image_meta,
                                       disk_info, rescue, block_device_info,
-                                      context, mdevs, accel_info)
+                                      context, mdevs, accel_info, share_info)
         xml = conf.to_xml()
 
         LOG.debug('End _get_guest_xml xml=%(xml)s',
@@ -11577,7 +11616,7 @@ class LibvirtDriver(driver.ComputeDriver):
                 raise exception.InstanceFaultRollback(
                     exception.ResizeError(reason=reason))
 
-        self.power_off(instance, timeout, retry_interval)
+        self.power_off(context, instance, timeout, retry_interval)
         self.unplug_vifs(instance, network_info)
         block_device_mapping = driver.block_device_info_get_mapping(
             block_device_info)
@@ -12585,3 +12624,15 @@ class LibvirtDriver(driver.ComputeDriver):
                               ' of host capabilities: %(error)s',
                               {'uri': self._host._uri, 'error': ex})
                     return None
+
+    def _guest_add_virtiofs_for_share(self, guest, instance, share_info):
+        """Add all share mount point as virtio fs entries."""
+        if share_info:
+            for share in share_info:
+                fs = vconfig.LibvirtConfigGuestFilesys()
+                fs.source_type = 'mount'
+                fs.access_mode = 'passthrough'
+                fs.driver_type = 'virtiofs'
+                fs.source_dir = self._get_share_mount_path(instance, share)
+                fs.target_dir = share.tag
+                guest.add_device(fs)

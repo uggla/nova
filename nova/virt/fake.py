@@ -121,6 +121,8 @@ class FakeDriver(driver.ComputeDriver):
         "supports_remote_managed_ports": True,
         "supports_address_space_passthrough": True,
         "supports_address_space_emulated": True,
+        "supports_virtio_fs": True,
+        "supports_mem_backing_file": True,
 
         # Supported image types
         "supports_image_type_raw": True,
@@ -278,18 +280,31 @@ class FakeDriver(driver.ComputeDriver):
         self.spawn(context, instance, image_meta, injected_files,
                    admin_password, allocations)
 
-    def power_off(self, instance, timeout=0, retry_interval=0):
+    def power_off(self, context, instance, timeout=0, retry_interval=0,
+            share_info=None):
         if instance.uuid in self.instances:
             self.instances[instance.uuid].state = power_state.SHUTDOWN
+            if share_info:
+                for share in share_info:
+                    share.deactivate()
         else:
             raise exception.InstanceNotFound(instance_id=instance.uuid)
 
     def power_on(self, context, instance, network_info,
-                 block_device_info=None, accel_info=None):
+                 block_device_info=None, accel_info=None, share_info=None):
         if instance.uuid in self.instances:
             self.instances[instance.uuid].state = power_state.RUNNING
+            if share_info:
+                for share in share_info:
+                    share.activate()
         else:
             raise exception.InstanceNotFound(instance_id=instance.uuid)
+
+    def mount_share(self, context, instance, share_mapping):
+        pass
+
+    def umount_share(self, context, instance, share_mapping):
+        pass
 
     def trigger_crash_dump(self, instance):
         pass
