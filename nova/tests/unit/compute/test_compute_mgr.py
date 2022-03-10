@@ -2034,11 +2034,13 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                 uuid=uuids.instance,
                 vm_state=vm_states.ACTIVE,
                 task_state=task_states.POWERING_OFF)
-        self.compute._power_off_instance(instance, clean_shutdown=True)
+        self.compute._power_off_instance(self.context, instance,
+                clean_shutdown=True, share_info=None)
         mock_power_off.assert_called_once_with(
+                self.context,
                 instance,
                 CONF.shutdown_timeout,
-                20)
+                20, None)
 
     @mock.patch('nova.context.RequestContext.elevated')
     @mock.patch('nova.objects.Instance.get_network_info')
@@ -4692,7 +4694,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             ]
             notify_instance_usage.assert_has_calls(notify_calls)
 
-            power_off_instance.assert_called_once_with(instance,
+            power_off_instance.assert_called_once_with(self.context, instance,
                                                        clean_shutdown)
 
             driver_rescue.assert_called_once_with(
@@ -5283,7 +5285,10 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_detach.assert_called_once_with(
             self.context, bdms[0], instance, destroy_bdm=False)
 
-    def test_stop_instance_task_state_none_power_state_shutdown(self):
+    @mock.patch('nova.compute.manager.ComputeManager._get_share_info',
+                return_value=[])
+    def test_stop_instance_task_state_none_power_state_shutdown(self,
+            mock_get_share_info):
         # Tests that stop_instance doesn't puke when the instance power_state
         # is shutdown and the task_state is None.
         instance = fake_instance.fake_instance_obj(
@@ -5312,7 +5317,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                 mock.call(self.context, instance, 'fake-mini',
                           action='power_off', phase='end'),
             ])
-            power_off_mock.assert_called_once_with(instance, True)
+            power_off_mock.assert_called_once_with(
+                    self.context, instance, True, [])
             save_mock.assert_called_once_with(
                 expected_task_state=[task_states.POWERING_OFF, None])
             self.assertEqual(power_state.SHUTDOWN, instance.power_state)
@@ -5722,7 +5728,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             mock_destroy.assert_called_once_with(
                 self.context, instance,
                 network_info=None, block_device_info=fake_block_device_info)
-            mock_power_off.assert_called_once_with(
+            mock_power_off.assert_called_once_with(self.context,
                 instance, clean_shutdown=True)
             if is_vol_backed and reimage_boot_vol:
                 mock_rebuild_vol_backed_inst.assert_called_once_with(
@@ -11512,7 +11518,8 @@ class ComputeManagerMigrationTestCase(test.NoDBTestCase,
             mock.call(self.context, self.instance, get_bdms.return_value,
                       get_instance_nw_info.return_value,
                       fields.NotificationPhase.END)])
-        _power_off_instance.assert_called_once_with(self.instance)
+        _power_off_instance.assert_called_once_with(
+                self.context, self.instance)
         self.assertEqual(power_state.SHUTDOWN, self.instance.power_state)
         if snapshot_id is None:
             _snapshot_for_resize.assert_not_called()
@@ -11564,7 +11571,8 @@ class ComputeManagerMigrationTestCase(test.NoDBTestCase,
                 exception.InstancePowerOffFailure,
                 self.compute._prep_snapshot_based_resize_at_source,
                 self.context, self.instance, self.migration)
-        _power_off_instance.assert_called_once_with(self.instance)
+        _power_off_instance.assert_called_once_with(
+                self.context, self.instance)
 
     @mock.patch('nova.objects.Instance.get_bdms',
                 return_value=objects.BlockDeviceMappingList())
