@@ -404,6 +404,7 @@ class ComputeAPI(object):
                  flavor
         * 6.1 - Add reimage_boot_volume parameter to rebuild_instance()
         * 6.2 - Add target_state parameter to rebuild_instance()
+        * 6.3 - Add mount_share() and umount_share()
     '''
 
     VERSION_ALIASES = {
@@ -1468,6 +1469,30 @@ class ComputeAPI(object):
         cctxt.cast(ctxt, 'volume_snapshot_delete', instance=instance,
                    volume_id=volume_id, snapshot_id=snapshot_id,
                    delete_info=delete_info)
+
+    def mount_share(self, ctxt, instance, share_mapping):
+        version = '6.3'
+        client = self.router.client(ctxt)
+        if not client.can_send_version(version):
+            raise exception.NovaException(
+                'Compute RPC version does not support '
+                'mount_share method.')
+        cctxt = self.router.client(ctxt).prepare(
+                server=_compute_host(None, instance), version=version)
+        return cctxt.call(ctxt, 'mount_share', instance=instance,
+                   share_mapping=share_mapping)
+
+    def umount_share(self, ctxt, instance, share_mapping):
+        version = '6.3'
+        client = self.router.client(ctxt)
+        if not client.can_send_version(version):
+            raise exception.NovaException(
+                'Compute RPC version does not support '
+                'umount_share method.')
+        cctxt = self.router.client(ctxt).prepare(
+                server=_compute_host(None, instance), version=version)
+        return cctxt.call(ctxt, 'umount_share', instance=instance,
+                   share_mapping=share_mapping)
 
     def external_instance_event(self, ctxt, instances, events, host=None):
         instance = instances[0]
