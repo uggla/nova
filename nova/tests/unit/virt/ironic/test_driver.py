@@ -1990,7 +1990,7 @@ class IronicDriverTestCase(test.NoDBTestCase):
         mock_looping.return_value = fake_looping_call
         instance = fake_instance.fake_instance_obj(self.ctx,
                                                    node=self.instance_uuid)
-        self.driver.power_off(instance, timeout)
+        self.driver.power_off(self.ctx, instance, timeout)
 
     @mock.patch.object(ironic_driver.IronicDriver,
                        '_validate_instance_and_node')
