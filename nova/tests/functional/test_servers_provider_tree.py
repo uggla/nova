@@ -45,6 +45,8 @@ class ProviderTreeTests(integrated_helpers.ProviderUsageBaseTestCase):
             os_traits.COMPUTE_VOLUME_EXTEND,
             os_traits.COMPUTE_VOLUME_MULTI_ATTACH,
             os_traits.COMPUTE_TRUSTED_CERTS,
+            os_traits.COMPUTE_STORAGE_VIRTIO_FS,
+            os_traits.COMPUTE_MEM_BACKING_FILE,
         ]
     ])
 

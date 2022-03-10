@@ -466,12 +466,12 @@ class TestZVMDriver(test.NoDBTestCase):
 
     @mock.patch('nova.virt.zvm.hypervisor.Hypervisor.guest_softstop')
     def test_power_off(self, ipa):
-        self._driver.power_off(self._instance)
+        self._driver.power_off(self._context, self._instance)
         ipa.assert_called_once_with(self._instance.name)
 
     @mock.patch('nova.virt.zvm.hypervisor.Hypervisor.guest_softstop')
     def test_power_off_with_timeout_interval(self, ipa):
-        self._driver.power_off(self._instance, 60, 10)
+        self._driver.power_off(self._context, self._instance, 60, 10)
         ipa.assert_called_once_with(self._instance.name,
                                     timeout=60, retry_interval=10)
 
