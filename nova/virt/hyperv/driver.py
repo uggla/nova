@@ -104,6 +104,8 @@ class HyperVDriver(driver.ComputeDriver):
         "supports_accelerators": False,
         "supports_secure_boot": True,
         "supports_remote_managed_ports": False,
+        "supports_virtio_fs": False,
+        "supports_mem_backing_file": False,
 
         # Supported image types
         "supports_image_type_vhd": True,
@@ -228,11 +230,12 @@ class HyperVDriver(driver.ComputeDriver):
     def resume(self, context, instance, network_info, block_device_info=None):
         self._vmops.resume(instance)
 
-    def power_off(self, instance, timeout=0, retry_interval=0):
+    def power_off(self, context, instance, timeout=0, retry_interval=0,
+            share_info=None):
         self._vmops.power_off(instance, timeout, retry_interval)
 
     def power_on(self, context, instance, network_info,
-                 block_device_info=None, accel_info=None):
+                 block_device_info=None, accel_info=None, share_info=None):
         self._vmops.power_on(instance, block_device_info, network_info)
 
     def resume_state_on_host_boot(self, context, instance, network_info,
