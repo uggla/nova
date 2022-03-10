@@ -404,6 +404,7 @@ class ComputeAPI(object):
                  flavor
         * 6.1 - Add reimage_boot_volume parameter to rebuild_instance()
         * 6.2 - Add target_state parameter to rebuild_instance()
+        * 6.3 - Add allow_share() and deny_share()
     '''
 
     VERSION_ALIASES = {
@@ -1462,6 +1463,38 @@ class ComputeAPI(object):
         cctxt.cast(ctxt, 'volume_snapshot_delete', instance=instance,
                    volume_id=volume_id, snapshot_id=snapshot_id,
                    delete_info=delete_info)
+
+    def allow_share(self, ctxt, instance, share_mapping):
+        version = '6.3'
+        client = self.router.client(ctxt)
+        if not client.can_send_version(version):
+            raise exception.NovaException(
+                'Compute RPC version does not support '
+                'allow_share method.')
+        cctxt = self.router.client(ctxt).prepare(
+                server=_compute_host(None, instance), version=version)
+        cctxt.cast(
+            ctxt,
+            "allow_share",
+            instance=instance,
+            share_mapping=share_mapping
+        )
+
+    def deny_share(self, ctxt, instance, share_mapping):
+        version = '6.3'
+        client = self.router.client(ctxt)
+        if not client.can_send_version(version):
+            raise exception.NovaException(
+                'Compute RPC version does not support '
+                'deny_share method.')
+        cctxt = self.router.client(ctxt).prepare(
+                server=_compute_host(None, instance), version=version)
+        cctxt.cast(
+            ctxt,
+            "deny_share",
+            instance=instance,
+            share_mapping=share_mapping,
+        )
 
     def external_instance_event(self, ctxt, instances, events, host=None):
         instance = instances[0]
