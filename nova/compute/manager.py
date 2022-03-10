@@ -2948,11 +2948,13 @@ class ComputeManager(manager.Manager):
 
         return timeout, retry_interval
 
-    def _power_off_instance(self, instance, clean_shutdown=True):
+    def _power_off_instance(self, context, instance, clean_shutdown=True,
+            share_info=None):
         """Power off an instance on this host."""
         timeout, retry_interval = self._get_power_off_values(
             instance, clean_shutdown)
-        self.driver.power_off(instance, timeout, retry_interval)
+        self.driver.power_off(context, instance, timeout, retry_interval,
+                share_info)
 
     def _shutdown_instance(self, context, instance,
                            bdms, requested_networks=None, notify=True,
@@ -3211,9 +3213,17 @@ class ComputeManager(manager.Manager):
     def stop_instance(self, context, instance, clean_shutdown):
         """Stopping an instance on this host."""
 
+        def set_instance_state_to_stopped(instance, expected_task_state):
+            instance.power_state = self._get_power_state(instance)
+            instance.vm_state = vm_states.STOPPED
+            instance.task_state = None
+            instance.save(expected_task_state=expected_task_state)
+
         @utils.synchronized(instance.uuid)
         def do_stop_instance():
             current_power_state = self._get_power_state(instance)
+            share_info = self._get_share_info(context, instance)
+
             LOG.debug('Stopping instance; current vm_state: %(vm_state)s, '
                       'current task_state: %(task_state)s, current DB '
                       'power_state: %(db_power_state)s, current VM '
@@ -3245,17 +3255,28 @@ class ComputeManager(manager.Manager):
                         self.host, action=fields.NotificationAction.POWER_OFF,
                         phase=fields.NotificationPhase.START)
 
-            self._power_off_instance(instance, clean_shutdown)
-            instance.power_state = self._get_power_state(instance)
-            instance.vm_state = vm_states.STOPPED
-            instance.task_state = None
-            instance.save(expected_task_state=expected_task_state)
+            try:
+                self._power_off_instance(context, instance, clean_shutdown,
+                        share_info)
+
+                set_instance_state_to_stopped(instance, expected_task_state)
+
+            except exception.ShareUmountError:
+                # In this case we should stop the instance despite the error
+                # to not be stuck with the instance on that will prevent to
+                # remove the share and fix the error.
+                set_instance_state_to_stopped(instance, expected_task_state)
+                # TODO(uggla) add error notification
+
             self._notify_about_instance_usage(context, instance,
                                               "power_off.end")
 
-            compute_utils.notify_about_instance_action(context, instance,
-                        self.host, action=fields.NotificationAction.POWER_OFF,
-                        phase=fields.NotificationPhase.END)
+            compute_utils.notify_about_instance_action(
+                context,
+                instance,
+                self.host,
+                action=fields.NotificationAction.POWER_OFF,
+                phase=fields.NotificationPhase.END)
 
         do_stop_instance()
 
@@ -3264,9 +3285,12 @@ class ComputeManager(manager.Manager):
         block_device_info = self._get_instance_block_device_info(context,
                                                                  instance)
         accel_info = self._get_accel_info(context, instance)
+
+        share_info = self._get_share_info(context, instance)
+
         self.driver.power_on(context, instance,
                              network_info,
-                             block_device_info, accel_info)
+                             block_device_info, accel_info, share_info)
 
     def _delete_snapshot_of_shelved_instance(self, context, instance,
                                              snapshot_id):
@@ -3296,25 +3320,31 @@ class ComputeManager(manager.Manager):
         compute_utils.notify_about_instance_action(context, instance,
             self.host, action=fields.NotificationAction.POWER_ON,
             phase=fields.NotificationPhase.START)
-        self._power_on(context, instance)
-        instance.power_state = self._get_power_state(instance)
-        instance.vm_state = vm_states.ACTIVE
-        instance.task_state = None
+        try:
+            self._power_on(context, instance)
+            instance.power_state = self._get_power_state(instance)
+            instance.vm_state = vm_states.ACTIVE
+            instance.task_state = None
 
-        # Delete an image(VM snapshot) for a shelved instance
-        snapshot_id = instance.system_metadata.get('shelved_image_id')
-        if snapshot_id:
-            self._delete_snapshot_of_shelved_instance(context, instance,
-                                                      snapshot_id)
+            # Delete an image(VM snapshot) for a shelved instance
+            snapshot_id = instance.system_metadata.get('shelved_image_id')
+            if snapshot_id:
+                self._delete_snapshot_of_shelved_instance(context, instance,
+                                                          snapshot_id)
 
-        # Delete system_metadata for a shelved instance
-        compute_utils.remove_shelved_keys_from_system_metadata(instance)
+            # Delete system_metadata for a shelved instance
+            compute_utils.remove_shelved_keys_from_system_metadata(instance)
 
-        instance.save(expected_task_state=task_states.POWERING_ON)
-        self._notify_about_instance_usage(context, instance, "power_on.end")
-        compute_utils.notify_about_instance_action(context, instance,
-            self.host, action=fields.NotificationAction.POWER_ON,
-            phase=fields.NotificationPhase.END)
+            instance.save(expected_task_state=task_states.POWERING_ON)
+            self._notify_about_instance_usage(
+                context, instance, "power_on.end")
+            compute_utils.notify_about_instance_action(context, instance,
+                self.host, action=fields.NotificationAction.POWER_ON,
+                phase=fields.NotificationPhase.END)
+        except exception.ShareMountError:
+            instance.vm_state = vm_states.ERROR
+            instance.task_state = None
+            instance.save()
 
     @messaging.expected_exceptions(NotImplementedError,
                                    exception.TriggerCrashDumpNotSupported,
@@ -3355,7 +3385,7 @@ class ComputeManager(manager.Manager):
             except NotImplementedError:
                 # Fallback to just powering off the instance if the
                 # hypervisor doesn't implement the soft_delete method
-                self.driver.power_off(instance)
+                self.driver.power_off(context, instance)
             instance.power_state = self._get_power_state(instance)
             instance.vm_state = vm_states.SOFT_DELETED
             instance.task_state = None
@@ -3423,7 +3453,7 @@ class ComputeManager(manager.Manager):
                         instance_uuid=instance.uuid, reason=msg)
             detach_block_devices(context, bdms)
         else:
-            self._power_off_instance(instance, clean_shutdown=True)
+            self._power_off_instance(context, instance, clean_shutdown=True)
             detach_block_devices(context, bdms)
             self.driver.destroy(context, instance,
                                 network_info=network_info,
@@ -3868,6 +3898,13 @@ class ComputeManager(manager.Manager):
             accel_info = []
         return accel_info
 
+    def _get_share_info(self, context, instance):
+
+        share_info = objects.ShareMappingList.get_by_instance_uuid(
+            context, instance.uuid)
+
+        return share_info
+
     @wrap_exception()
     @reverts_task_state
     @wrap_instance_event(prefix='compute')
@@ -4309,7 +4346,7 @@ class ComputeManager(manager.Manager):
             phase=fields.NotificationPhase.START)
 
         try:
-            self._power_off_instance(instance, clean_shutdown)
+            self._power_off_instance(context, instance, clean_shutdown)
 
             self.driver.rescue(context, instance, network_info,
                                rescue_image_meta, admin_password,
@@ -5592,7 +5629,7 @@ class ComputeManager(manager.Manager):
         # potentially running in two places.
         LOG.debug('Stopping instance', instance=instance)
         try:
-            self._power_off_instance(instance)
+            self._power_off_instance(ctxt, instance)
         except Exception as e:
             LOG.exception('Failed to power off instance.', instance=instance)
             raise exception.InstancePowerOffFailure(reason=str(e))
@@ -6531,7 +6568,7 @@ class ComputeManager(manager.Manager):
         # running.
         if instance.power_state == power_state.PAUSED:
             clean_shutdown = False
-        self._power_off_instance(instance, clean_shutdown)
+        self._power_off_instance(context, instance, clean_shutdown)
         self.driver.snapshot(context, instance, image_id, update_task_state)
 
         instance.system_metadata['shelved_at'] = timeutils.utcnow().isoformat()
@@ -6593,7 +6630,7 @@ class ComputeManager(manager.Manager):
                 self.host, action=fields.NotificationAction.SHELVE_OFFLOAD,
                 phase=fields.NotificationPhase.START, bdms=bdms)
 
-        self._power_off_instance(instance, clean_shutdown)
+        self._power_off_instance(context, instance, clean_shutdown)
         current_power_state = self._get_power_state(instance)
         network_info = self.network_api.get_instance_nw_info(context, instance)
 
@@ -10306,7 +10343,7 @@ class ComputeManager(manager.Manager):
                              "DELETED but still present on host.",
                              instance.name, instance=instance)
                     try:
-                        self.driver.power_off(instance)
+                        self.driver.power_off(context, instance)
                     except Exception:
                         LOG.warning("Failed to power off instance",
                                     instance=instance, exc_info=True)

@@ -1488,6 +1488,7 @@ class LibvirtConfigGuestFilesys(LibvirtConfigGuestDevice):
                                                         **kwargs)
 
         self.source_type = "mount"
+        self.accessmode = None
         self.source_dir = None
         self.source_file = None
         self.source_dev = None
@@ -1499,6 +1500,8 @@ class LibvirtConfigGuestFilesys(LibvirtConfigGuestDevice):
         dev = super(LibvirtConfigGuestFilesys, self).format_dom()
 
         dev.set("type", self.source_type)
+        if self.accessmode:
+            dev.set("accessmode", self.accessmode)
 
         if self.source_type == "file":
             dev.append(etree.Element("driver", type = self.driver_type,
@@ -1506,6 +1509,9 @@ class LibvirtConfigGuestFilesys(LibvirtConfigGuestDevice):
             dev.append(etree.Element("source", file=self.source_file))
         elif self.source_type == "block":
             dev.append(etree.Element("source", dev=self.source_dev))
+        elif self.source_type == "mount" and self.driver_type == "virtiofs":
+            dev.append(etree.Element("driver", type = self.driver_type))
+            dev.append(etree.Element("source", dir=self.source_dir))
         else:
             dev.append(etree.Element("source", dir=self.source_dir))
         dev.append(etree.Element("target", dir=self.target_dir))
@@ -1516,12 +1522,15 @@ class LibvirtConfigGuestFilesys(LibvirtConfigGuestDevice):
         super(LibvirtConfigGuestFilesys, self).parse_dom(xmldoc)
 
         self.source_type = xmldoc.get('type')
+        self.accessmode = xmldoc.get('accessmode')
 
         for c in xmldoc:
             if c.tag == 'driver':
                 if self.source_type == 'file':
                     self.driver_type = c.get('type')
                     self.driver_format = c.get('format')
+                if self.source_type == 'mount':
+                    self.driver_type = c.get('type')
             elif c.tag == 'source':
                 if self.source_type == 'file':
                     self.source_file = c.get('file')

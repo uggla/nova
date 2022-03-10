@@ -165,6 +165,8 @@ class IronicDriver(virt_driver.ComputeDriver):
         "supports_pcpus": False,
         "supports_accelerators": False,
         "supports_remote_managed_ports": False,
+        "supports_virtio_fs": False,
+        "supports_mem_backing_file": False,
 
         # Image type support flags
         "supports_image_type_aki": False,
@@ -1371,7 +1373,8 @@ class IronicDriver(virt_driver.ComputeDriver):
                   'node': node.uuid},
                  instance=instance)
 
-    def power_off(self, instance, timeout=0, retry_interval=0):
+    def power_off(self, context, instance, timeout=0, retry_interval=0,
+            share_info=None):
         """Power off the specified instance.
 
         NOTE: Unlike the libvirt driver, this method does not delete
@@ -1428,7 +1431,7 @@ class IronicDriver(virt_driver.ComputeDriver):
                  node.uuid, instance=instance)
 
     def power_on(self, context, instance, network_info,
-                 block_device_info=None, accel_info=None):
+                 block_device_info=None, accel_info=None, share_info=None):
         """Power on the specified instance.
 
         NOTE: Unlike the libvirt driver, this method does not delete
@@ -1442,6 +1445,7 @@ class IronicDriver(virt_driver.ComputeDriver):
             information. Ignored by this driver.
         :param accel_info: List of accelerator requests for this instance.
                            Ignored by this driver.
+        :param share_info: intance share attached list.
         """
         LOG.debug('Power on called for instance', instance=instance)
         node = self._validate_instance_and_node(instance)

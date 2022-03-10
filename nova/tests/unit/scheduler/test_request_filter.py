@@ -509,6 +509,85 @@ class TestRequestFilter(test.NoDBTestCase):
         # Assert about logging
         mock_log.assert_not_called()
 
+    @mock.patch.object(request_filter, 'LOG')
+    def test_virtio_fs_filter(self, mock_log):
+        # First ensure that virtio_fs_filter is included
+        self.assertIn(request_filter.virtio_fs_filter,
+                      request_filter.ALL_REQUEST_FILTERS)
+
+        es = {'virtio_fs': 'true'}
+        reqspec = objects.RequestSpec(flavor=objects.Flavor(extra_specs=es))
+        self.assertEqual(set(), reqspec.root_required)
+        self.assertEqual(set(), reqspec.root_forbidden)
+
+        # Request filter puts the trait into the request spec
+        request_filter.virtio_fs_filter(self.context, reqspec)
+        self.assertEqual({ot.COMPUTE_STORAGE_VIRTIO_FS}, reqspec.root_required)
+        self.assertEqual(set(), reqspec.root_forbidden)
+
+        # Assert both the in-method logging and trace decorator.
+        log_lines = [c[0][0] for c in mock_log.debug.call_args_list]
+        self.assertIn('added required trait', log_lines[0])
+        self.assertIn('took %.1f seconds', log_lines[1])
+
+    @mock.patch.object(request_filter, 'LOG')
+    def test_virtio_fs_filter_not_required(self, mock_log):
+        # First ensure that virtio_fs_filter is included
+        self.assertIn(request_filter.virtio_fs_filter,
+                      request_filter.ALL_REQUEST_FILTERS)
+
+        reqspec = objects.RequestSpec(flavor=objects.Flavor(extra_specs={}))
+        self.assertEqual(set(), reqspec.root_required)
+        self.assertEqual(set(), reqspec.root_forbidden)
+
+        # Request filter puts the trait into the request spec
+        request_filter.virtio_fs_filter(self.context, reqspec)
+        self.assertEqual(set(), reqspec.root_required)
+        self.assertEqual(set(), reqspec.root_forbidden)
+
+        # Assert about logging
+        mock_log.assert_not_called()
+
+    @mock.patch.object(request_filter, 'LOG')
+    def test_mem_backing_file_filter(self, mock_log):
+        # First ensure that mem_backing_file_filter is included
+        self.assertIn(request_filter.mem_backing_file_filter,
+                      request_filter.ALL_REQUEST_FILTERS)
+
+        es = {'mem_backing_file': 'true'}
+        reqspec = objects.RequestSpec(flavor=objects.Flavor(extra_specs=es))
+        self.assertEqual(set(), reqspec.root_required)
+        self.assertEqual(set(), reqspec.root_forbidden)
+
+        # Request filter puts the trait into the request spec
+        request_filter.mem_backing_file_filter(self.context, reqspec)
+        self.assertEqual(
+            {ot.COMPUTE_MEM_BACKING_FILE}, reqspec.root_required)
+        self.assertEqual(set(), reqspec.root_forbidden)
+
+        # Assert both the in-method logging and trace decorator.
+        log_lines = [c[0][0] for c in mock_log.debug.call_args_list]
+        self.assertIn('added required trait', log_lines[0])
+        self.assertIn('took %.1f seconds', log_lines[1])
+
+    @mock.patch.object(request_filter, 'LOG')
+    def test_mem_backing_file_filter_not_required(self, mock_log):
+        # First ensure that mem_backing_file_filter is included
+        self.assertIn(request_filter.mem_backing_file_filter,
+                      request_filter.ALL_REQUEST_FILTERS)
+
+        reqspec = objects.RequestSpec(flavor=objects.Flavor(extra_specs={}))
+        self.assertEqual(set(), reqspec.root_required)
+        self.assertEqual(set(), reqspec.root_forbidden)
+
+        # Request filter puts the trait into the request spec
+        request_filter.mem_backing_file_filter(self.context, reqspec)
+        self.assertEqual(set(), reqspec.root_required)
+        self.assertEqual(set(), reqspec.root_forbidden)
+
+        # Assert about logging
+        mock_log.assert_not_called()
+
     def test_routed_networks_filter_not_enabled(self):
         self.assertIn(request_filter.routed_networks_filter,
                       request_filter.ALL_REQUEST_FILTERS)

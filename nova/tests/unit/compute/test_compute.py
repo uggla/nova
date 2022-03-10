@@ -2454,7 +2454,8 @@ class ComputeTestCase(BaseTestCase,
         called = {'power_on': False}
 
         def fake_driver_power_on(self, context, instance, network_info,
-                                 block_device_info, accel_device_info=None):
+                                 block_device_info, accel_device_info=None,
+                                 share_info=None):
             called['power_on'] = True
 
         self.stub_out('nova.virt.fake.FakeDriver.power_on',
@@ -2477,6 +2478,102 @@ class ComputeTestCase(BaseTestCase,
                        '_get_instance_block_device_info')
     @mock.patch('nova.network.neutron.API.get_instance_nw_info')
     @mock.patch.object(fake.FakeDriver, 'power_on')
+    @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
+    def test_power_on_with_share(self, mock_share,
+            mock_power_on, mock_nw_info, mock_blockdev):
+        instance = self._create_fake_instance_obj()
+
+        share_mapping = objects.ShareMapping(self.context)
+        share_mapping.uuid = uuids.share_mapping
+        share_mapping.instance_uuid = uuids.instance
+        share_mapping.share_id = uuids.share
+        share_mapping.status = 'inactive'
+        share_mapping.tag = 'fake_tag'
+        share_mapping.export_location = 'fake_export_location'
+        share_mapping.share_proto = 'NFS'
+
+        share_info = [share_mapping]
+        mock_share.return_value = share_info
+        mock_nw_info.return_value = 'nw_info'
+        mock_blockdev.return_value = 'blockdev_info'
+
+        self.compute._power_on(self.context, instance)
+        mock_share.assert_called_once_with(self.context, instance['uuid'])
+        # mock_manila.assert_called_once_with(self.context, uuids.share)
+        mock_power_on.assert_called_once_with(
+            self.context,
+            instance,
+            'nw_info',
+            'blockdev_info',
+            [],
+            share_info
+        )
+
+    @mock.patch.object(compute_manager.ComputeManager,
+                       '_get_instance_block_device_info')
+    @mock.patch('nova.network.neutron.API.get_instance_nw_info')
+    @mock.patch.object(fake.FakeDriver, 'power_on')
+    @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
+    def test_power_on_share_state_active(self, mock_share,
+            mock_power_on, mock_nw_info, mock_blockdev):
+        instance = self._create_fake_instance_obj()
+
+        share_mapping = objects.ShareMapping(self.context)
+        share_mapping.uuid = uuids.share_mapping
+        share_mapping.instance_uuid = uuids.instance
+        share_mapping.share_id = uuids.share
+        share_mapping.status = 'active'
+        share_mapping.tag = 'fake_tag'
+        share_mapping.export_location = 'fake_export_location'
+        share_mapping.share_proto = 'NFS'
+
+        share_info = [share_mapping]
+        mock_share.return_value = share_info
+        mock_nw_info.return_value = 'nw_info'
+        mock_blockdev.return_value = 'blockdev_info'
+
+        self.compute._power_on(self.context, instance)
+        mock_share.assert_called_once_with(self.context, instance['uuid'])
+        # mock_manila.assert_called_once_with(self.context, uuids.share)
+        mock_power_on.assert_called_once_with(
+            self.context,
+            instance,
+            'nw_info',
+            'blockdev_info',
+            [],
+            share_info
+        )
+
+    @mock.patch.object(compute_manager.ComputeManager,
+                       '_get_instance_block_device_info')
+    @mock.patch('nova.network.neutron.API.get_instance_nw_info')
+    @mock.patch.object(fake.FakeDriver, 'power_on')
+    @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
+    def test_power_on_with_no_share(self, mock_share,
+            mock_power_on, mock_nw_info, mock_blockdev):
+        instance = self._create_fake_instance_obj()
+
+        share_info = []
+        mock_share.return_value = share_info
+        mock_nw_info.return_value = 'nw_info'
+        mock_blockdev.return_value = 'blockdev_info'
+
+        self.compute._power_on(self.context, instance)
+        mock_share.assert_called_once_with(self.context, instance['uuid'])
+        # mock_manila.assert_called_once_with(self.context, uuids.share)
+        mock_power_on.assert_called_once_with(
+            self.context,
+            instance,
+            'nw_info',
+            'blockdev_info',
+            [],
+            []
+        )
+
+    @mock.patch.object(compute_manager.ComputeManager,
+                       '_get_instance_block_device_info')
+    @mock.patch('nova.network.neutron.API.get_instance_nw_info')
+    @mock.patch.object(fake.FakeDriver, 'power_on')
     @mock.patch('nova.accelerator.cyborg._CyborgClient.get_arqs_for_instance')
     def test_power_on_with_accels(self, mock_get_arqs,
             mock_power_on, mock_nw_info, mock_blockdev):
@@ -2490,15 +2587,15 @@ class ComputeTestCase(BaseTestCase,
         self.compute._power_on(self.context, instance)
         mock_get_arqs.assert_called_once_with(instance['uuid'])
         mock_power_on.assert_called_once_with(self.context,
-            instance, 'nw_info', 'blockdev_info', accel_info)
+            instance, 'nw_info', 'blockdev_info', accel_info, [])
 
     def test_power_off(self):
         # Ensure instance can be powered off.
 
         called = {'power_off': False}
 
-        def fake_driver_power_off(self, instance,
-                                  shutdown_timeout, shutdown_attempts):
+        def fake_driver_power_off(self, context, instance, shutdown_timeout,
+                shutdown_attempts, share_info=None):
             called['power_off'] = True
 
         self.stub_out('nova.virt.fake.FakeDriver.power_off',
@@ -2514,7 +2611,7 @@ class ComputeTestCase(BaseTestCase,
         inst_obj.task_state = task_states.POWERING_OFF
         inst_obj.save()
         self.compute.stop_instance(self.context, instance=inst_obj,
-                                   clean_shutdown=True)
+                clean_shutdown=True)
         self.assertTrue(called['power_off'])
         self.compute.terminate_instance(self.context, inst_obj, [])
 
@@ -7027,7 +7124,8 @@ class ComputeTestCase(BaseTestCase,
         mock_get.assert_called_once_with(ctxt,
                                               {'deleted': True,
                                                'soft_deleted': False})
-        mock_power.assert_has_calls([mock.call(inst1), mock.call(inst2)])
+        mock_power.assert_has_calls(
+                [mock.call(ctxt, inst1), mock.call(ctxt, inst2)])
 
     @mock.patch.object(compute_manager.ComputeManager,
                        '_get_instances_on_driver')
@@ -7045,7 +7143,8 @@ class ComputeTestCase(BaseTestCase,
         mock_get.assert_called_once_with(ctxt,
                                          {'deleted': True,
                                           'soft_deleted': False})
-        mock_power.assert_has_calls([mock.call(inst1), mock.call(inst2)])
+        mock_power.assert_has_calls(
+                [mock.call(ctxt, inst1), mock.call(ctxt, inst2)])
 
     @mock.patch.object(compute_manager.ComputeManager,
                        '_get_instances_on_driver')
