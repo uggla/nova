@@ -91,6 +91,7 @@ from nova import safe_utils
 from nova.scheduler.client import query
 from nova.scheduler.client import report
 from nova.scheduler import utils as scheduler_utils
+from nova.share import manila
 from nova import utils
 from nova.virt import block_device as driver_block_device
 from nova.virt import configdrive
@@ -618,7 +619,7 @@ class ComputeVirtAPI(virtapi.VirtAPI):
 class ComputeManager(manager.Manager):
     """Manages the running instances from creation to destruction."""
 
-    target = messaging.Target(version='6.2')
+    target = messaging.Target(version='6.3')
 
     def __init__(self, compute_driver=None, *args, **kwargs):
         """Load configuration options and connect to the hypervisor."""
@@ -634,6 +635,7 @@ class ComputeManager(manager.Manager):
         self.virtapi = ComputeVirtAPI(self)
         self.network_api = neutron.API()
         self.volume_api = cinder.API()
+        self.manila_api = manila.API()
         self.image_api = glance.API()
         self._last_bw_usage_poll = 0.0
         self.compute_api = compute.API()
@@ -3054,11 +3056,13 @@ class ComputeManager(manager.Manager):
 
         return timeout, retry_interval
 
-    def _power_off_instance(self, instance, clean_shutdown=True):
+    def _power_off_instance(
+            self, context, instance, clean_shutdown=True, share_info=None):
         """Power off an instance on this host."""
         timeout, retry_interval = self._get_power_off_values(
             instance, clean_shutdown)
-        self.driver.power_off(instance, timeout, retry_interval)
+        self.driver.power_off(
+            context, instance, timeout, retry_interval, share_info)
 
     def _shutdown_instance(self, context, instance,
                            bdms, requested_networks=None, notify=True,
@@ -3320,6 +3324,8 @@ class ComputeManager(manager.Manager):
         @utils.synchronized(instance.uuid)
         def do_stop_instance():
             current_power_state = self._get_power_state(instance)
+            share_info = self._get_share_info(context, instance)
+
             LOG.debug('Stopping instance; current vm_state: %(vm_state)s, '
                       'current task_state: %(task_state)s, current DB '
                       'power_state: %(db_power_state)s, current VM '
@@ -3351,7 +3357,8 @@ class ComputeManager(manager.Manager):
                         self.host, action=fields.NotificationAction.POWER_OFF,
                         phase=fields.NotificationPhase.START)
 
-            self._power_off_instance(instance, clean_shutdown)
+            self._power_off_instance(
+                context, instance, clean_shutdown, share_info)
             instance.power_state = self._get_power_state(instance)
             instance.vm_state = vm_states.STOPPED
             instance.task_state = None
@@ -3370,9 +3377,12 @@ class ComputeManager(manager.Manager):
         block_device_info = self._get_instance_block_device_info(context,
                                                                  instance)
         accel_info = self._get_accel_info(context, instance)
+
+        share_info = self._get_share_info(context, instance)
+
         self.driver.power_on(context, instance,
                              network_info,
-                             block_device_info, accel_info)
+                             block_device_info, accel_info, share_info)
 
     def _delete_snapshot_of_shelved_instance(self, context, instance,
                                              snapshot_id):
@@ -3461,7 +3471,7 @@ class ComputeManager(manager.Manager):
             except NotImplementedError:
                 # Fallback to just powering off the instance if the
                 # hypervisor doesn't implement the soft_delete method
-                self.driver.power_off(instance)
+                self.driver.power_off(context, instance)
             instance.power_state = self._get_power_state(instance)
             instance.vm_state = vm_states.SOFT_DELETED
             instance.task_state = None
@@ -3636,7 +3646,7 @@ class ComputeManager(manager.Manager):
             detach_block_devices(context, bdms,
                                  detach_root_bdm=detach_root_bdm)
         else:
-            self._power_off_instance(instance, clean_shutdown=True)
+            self._power_off_instance(context, instance, clean_shutdown=True)
             detach_block_devices(context, bdms,
                                  detach_root_bdm=detach_root_bdm)
             if reimage_boot_volume:
@@ -4143,6 +4153,31 @@ class ComputeManager(manager.Manager):
             accel_info = []
         return accel_info
 
+    def _get_share_info(self, context, instance):
+        share_mappings = []
+        # Filter share_mapping in error to allow VM to start.
+        for share_mapping in objects.ShareMappingList.get_by_instance_uuid(
+            context, instance.uuid
+        ):
+            if share_mapping.status == fields.ShareMappingStatus.ERROR:
+                LOG.warning(
+                    "Share id '%s' attached to server id '%s' is in "
+                    "error state. So skipping it to avoid VM errors.",
+                    share_mapping.share_id,
+                    instance.id
+                )
+            else:
+                share_mappings.append(
+                    objects.base.obj_to_primitive(share_mapping))
+
+        share_info = objects.base.obj_make_list(
+            context,
+            objects.ShareMappingList(context),
+            objects.ShareMapping,
+            share_mappings)
+
+        return share_info
+
     @wrap_exception()
     @reverts_task_state
     @wrap_instance_event(prefix='compute')
@@ -4410,6 +4445,43 @@ class ComputeManager(manager.Manager):
             LOG.debug('Instance disappeared during volume snapshot delete',
                       instance=instance)
 
+    @messaging.expected_exceptions(NotImplementedError)
+    @wrap_exception()
+    def mount_share(self, context, instance, share_mapping):
+        compute_ip = CONF.my_block_storage_ip
+
+        access = self.manila_api.get_access(
+            context,
+            share_mapping.share_id,
+            'ip',
+            compute_ip
+        )
+
+        if not access:
+            self.manila_api.allow(
+                context,
+                share_mapping.share_id,
+                'ip',
+                compute_ip,
+                'rw'
+            )
+
+        self.driver.mount_share(context, instance, share_mapping)
+
+    @messaging.expected_exceptions(NotImplementedError)
+    @wrap_exception()
+    def umount_share(self, context, instance, share_mapping):
+        compute_ip = CONF.my_block_storage_ip
+
+        self.manila_api.deny(
+            context,
+            share_mapping.share_id,
+            'ip',
+            compute_ip
+        )
+
+        self.driver.umount_share(context, instance, share_mapping)
+
     @wrap_instance_fault
     def _rotate_backups(self, context, instance, backup_type, rotation):
         """Delete excess backups associated to an instance.
@@ -4584,7 +4656,7 @@ class ComputeManager(manager.Manager):
             phase=fields.NotificationPhase.START)
 
         try:
-            self._power_off_instance(instance, clean_shutdown)
+            self._power_off_instance(context, instance, clean_shutdown)
 
             self.driver.rescue(context, instance, network_info,
                                rescue_image_meta, admin_password,
@@ -5869,7 +5941,7 @@ class ComputeManager(manager.Manager):
         # potentially running in two places.
         LOG.debug('Stopping instance', instance=instance)
         try:
-            self._power_off_instance(instance)
+            self._power_off_instance(ctxt, instance)
         except Exception as e:
             LOG.exception('Failed to power off instance.', instance=instance)
             raise exception.InstancePowerOffFailure(reason=str(e))
@@ -6808,7 +6880,7 @@ class ComputeManager(manager.Manager):
         # running.
         if instance.power_state == power_state.PAUSED:
             clean_shutdown = False
-        self._power_off_instance(instance, clean_shutdown)
+        self._power_off_instance(context, instance, clean_shutdown)
         self.driver.snapshot(context, instance, image_id, update_task_state)
 
         instance.system_metadata['shelved_at'] = timeutils.utcnow().isoformat()
@@ -6870,7 +6942,7 @@ class ComputeManager(manager.Manager):
                 self.host, action=fields.NotificationAction.SHELVE_OFFLOAD,
                 phase=fields.NotificationPhase.START, bdms=bdms)
 
-        self._power_off_instance(instance, clean_shutdown)
+        self._power_off_instance(context, instance, clean_shutdown)
         current_power_state = self._get_power_state(instance)
         network_info = self.network_api.get_instance_nw_info(context, instance)
 
@@ -10628,7 +10700,7 @@ class ComputeManager(manager.Manager):
                              "DELETED but still present on host.",
                              instance.name, instance=instance)
                     try:
-                        self.driver.power_off(instance)
+                        self.driver.power_off(context, instance)
                     except Exception:
                         LOG.warning("Failed to power off instance",
                                     instance=instance, exc_info=True)
