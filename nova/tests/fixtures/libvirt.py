@@ -1034,7 +1034,7 @@ class NodeDevice(object):
     def attach(self):
         pass
 
-    def dettach(self):
+    def detach(self):
         pass
 
     def reset(self):
