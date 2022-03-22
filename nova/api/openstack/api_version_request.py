@@ -252,6 +252,8 @@ REST_API_VERSION_HISTORY = """REST API Version History:
     * 2.92 - Drop generation of keypair, add keypair name validation on
              ``POST /os-keypairs`` and allow including @ and dot (.) characters
              in keypair name.
+    * 2.93 - Adds new API ``GET /servers/{server_id}/shares`` which shows
+             shares attachements of a given server.
 """
 
 # The minimum and maximum versions of the API supported
