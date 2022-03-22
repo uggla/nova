@@ -733,13 +733,23 @@ class ShareProtocolUnknown(NotFound):
     msg_fmt = _("Share protocol %(share_proto)s is unknown.")
 
 
-class ShareUmountError(NovaException):
+class ShareErrorFilter(NovaException):
+    msg_fmt = _("")
+
+    def filter_format_message(self):
+        # Take only the first line of error message.
+        # This method is used to simplify message and not leak internal data
+        # to the user.
+        return self.args[0].split('\n')[0]
+
+
+class ShareUmountError(ShareErrorFilter):
     msg_fmt = _("Share id %(share_id)s umount error "
                 "from server %(server_id)s.\n"
                 "Reason: %(reason)s.")
 
 
-class ShareMountError(NovaException):
+class ShareMountError(ShareErrorFilter):
     msg_fmt = _("Share id %(share_id)s mount error "
                 "from server %(server_id)s.\n"
                 "Reason: %(reason)s.")
