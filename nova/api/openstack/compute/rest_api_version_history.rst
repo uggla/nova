@@ -1202,3 +1202,10 @@ hostname based on the display name.
 
 In addition, the ``OS-EXT-SRV-ATTR:hostname`` field for all server
 responses is now visible to all users. Previously this was an admin-only field.
+
+.. _microversion 2.92:
+
+2.92
+----
+
+Blabla

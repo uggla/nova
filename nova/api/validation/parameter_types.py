@@ -345,6 +345,14 @@ image_id = {
     'type': 'string', 'format': 'uuid'
 }
 
+share_id = {
+    'type': 'string', 'format': 'uuid'
+}
+
+share_tag = {
+    'type': 'string', 'minLength': 1, 'maxLength': 255,
+    'pattern': '^[a-zA-Z0-9-]*$'
+}
 
 image_id_or_empty_string = {
     'oneOf': [
