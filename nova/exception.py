@@ -721,12 +721,21 @@ class ShareNotFound(NotFound):
     msg_fmt = _("Share %(share_id)s could not be found.")
 
 
+class ShareStatusIncorect(NotFound):
+    msg_fmt = _("Share %(share_id)s is in '%(status)s' instead of "
+                "'available' status.")
+
+
 class ShareMappingAlreadyExists(NotFound):
     msg_fmt = _("Share %(share_id)s already associated to this server.")
 
 
 class ShareProtocolNotSupported(NotFound):
     msg_fmt = _("Share protocol %(share_proto)s is unknown.")
+
+
+class ShareMissingExportLocation(NotFound):
+    msg_fmt = _("Share %(share_id)s export location is missing.")
 
 
 class ShareError(NovaException):
