@@ -103,6 +103,12 @@ class NovaException(Exception):
         # which should be our full NovaException message, (see __init__)
         return self.args[0]
 
+    def filter_format_message(self):
+        # Take only the first line of error message.
+        # This method is used to simplify message and not leak internal data
+        # to the user.
+        return self.args[0].split('\n')[0]
+
     def __repr__(self):
         dict_repr = self.__dict__
         dict_repr['class'] = self.__class__.__name__
