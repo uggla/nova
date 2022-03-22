@@ -1214,7 +1214,7 @@ Add support to pin a server to an availability zone or unpin a server from any a
 
 .. _microversion 2.92:
 
-2.92
+2.93
 ----
 
 The ``POST /os-keypairs`` API now forbids to generate a keypair and allows new
@@ -1228,7 +1228,6 @@ safe characters, specifically '@' and '.' (dot character).
 Add support for volume backed server rebuild. The end user will provide the
 image with the rebuild command and it will rebuild the volume with the new
 image similar to the result of rebuilding an ephemeral disk.
-
 
 2.94
 ----
@@ -1247,3 +1246,8 @@ Any evacuated instances will be now stopped at destination. This
 requires minimun nova release 27.0.0, OpenStack release 2023.1
 Antelope.  Operators can still use previous microversion for older
 behavior.
+
+2.96
+----
+
+Blabla
