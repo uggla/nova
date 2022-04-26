@@ -657,6 +657,30 @@ class BlockDeviceMapping(BASE, NovaBase, models.SoftDeleteMixin):
 
 # TODO(stephenfin): Remove once we drop the security_groups field from the
 # Instance table. Until then, this is tied to the SecurityGroup table
+
+
+class ShareMapping(BASE, NovaBase):
+    """Represents share / instance mapping."""
+    __tablename__ = "share_mapping"
+    __table_args__ = (
+        sa.Index('share_id', 'share_id'),
+        sa.Index('share_mapping_instance_uuid_share_id_idx',
+              'instance_uuid', 'share_id'),
+    )
+    id = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
+    uuid = sa.Column(sa.String(36))
+    instance_uuid = sa.Column(sa.String(36), sa.ForeignKey('instances.uuid'))
+    instance = orm.relationship("Instance", foreign_keys=instance_uuid,
+                            primaryjoin='and_(ShareMapping.instance_uuid == '
+                                        'Instance.uuid, Instance.deleted == '
+                                        '0)')
+    share_id = sa.Column(sa.String(36))
+    status = sa.Column(sa.String(32))
+    tag = sa.Column(sa.String(48))
+    export_location = sa.Column(sa.String(255))
+    share_proto = sa.Column(sa.String(32))
+
+
 class SecurityGroupInstanceAssociation(BASE, NovaBase, models.SoftDeleteMixin):
     __tablename__ = 'security_group_instance_association'
     __table_args__ = (
