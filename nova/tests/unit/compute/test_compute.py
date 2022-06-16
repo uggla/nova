@@ -2473,6 +2473,82 @@ class ComputeTestCase(BaseTestCase,
                        '_get_instance_block_device_info')
     @mock.patch('nova.network.neutron.API.get_instance_nw_info')
     @mock.patch.object(fake.FakeDriver, 'power_on')
+    @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
+    def test_power_on_with_share(self, mock_share,
+            mock_power_on, mock_nw_info, mock_blockdev):
+        instance = self._create_fake_instance_obj()
+
+        share_mapping = objects.ShareMapping(self.context)
+        share_mapping.instance_uuid = uuids.instance
+        share_mapping.share_id = uuids.share
+        share_mapping.status = 'attaching'
+        share_mapping.tag = 'fake_tag'
+        share_mapping.export_location = 'fake_export_location'
+        share_mapping.share_proto = 'NFS'
+
+        share_info = [share_mapping]
+        mock_share.return_value = share_info
+        mock_nw_info.return_value = 'nw_info'
+        mock_blockdev.return_value = 'blockdev_info'
+
+        self.compute._power_on(self.context, instance)
+        mock_share.assert_called_once_with(self.context, instance['uuid'])
+        # mock_manila.assert_called_once_with(self.context, uuids.share)
+        mock_power_on.assert_called_once_with(self.context,
+            instance, 'nw_info', 'blockdev_info', [], share_info)
+
+    @mock.patch.object(compute_manager.ComputeManager,
+                       '_get_instance_block_device_info')
+    @mock.patch('nova.network.neutron.API.get_instance_nw_info')
+    @mock.patch.object(fake.FakeDriver, 'power_on')
+    @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
+    def test_power_on_share_state_detaching(self, mock_share,
+            mock_power_on, mock_nw_info, mock_blockdev):
+        instance = self._create_fake_instance_obj()
+
+        share_mapping = objects.ShareMapping(self.context)
+        share_mapping.instance_uuid = uuids.instance
+        share_mapping.share_id = uuids.share
+        share_mapping.status = 'detaching'
+        share_mapping.tag = 'fake_tag'
+        share_mapping.export_location = 'fake_export_location'
+        share_mapping.share_proto = 'NFS'
+
+        share_info = [share_mapping]
+        mock_share.return_value = share_info
+        mock_nw_info.return_value = 'nw_info'
+        mock_blockdev.return_value = 'blockdev_info'
+
+        self.compute._power_on(self.context, instance)
+        mock_share.assert_called_once_with(self.context, instance['uuid'])
+        # mock_manila.assert_called_once_with(self.context, uuids.share)
+        mock_power_on.assert_called_once_with(self.context,
+            instance, 'nw_info', 'blockdev_info', [], [])
+
+    @mock.patch.object(compute_manager.ComputeManager,
+                       '_get_instance_block_device_info')
+    @mock.patch('nova.network.neutron.API.get_instance_nw_info')
+    @mock.patch.object(fake.FakeDriver, 'power_on')
+    @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
+    def test_power_on_with_no_share(self, mock_share,
+            mock_power_on, mock_nw_info, mock_blockdev):
+        instance = self._create_fake_instance_obj()
+
+        share_info = []
+        mock_share.return_value = share_info
+        mock_nw_info.return_value = 'nw_info'
+        mock_blockdev.return_value = 'blockdev_info'
+
+        self.compute._power_on(self.context, instance)
+        mock_share.assert_called_once_with(self.context, instance['uuid'])
+        # mock_manila.assert_called_once_with(self.context, uuids.share)
+        mock_power_on.assert_called_once_with(self.context,
+            instance, 'nw_info', 'blockdev_info', [], [])
+
+    @mock.patch.object(compute_manager.ComputeManager,
+                       '_get_instance_block_device_info')
+    @mock.patch('nova.network.neutron.API.get_instance_nw_info')
+    @mock.patch.object(fake.FakeDriver, 'power_on')
     @mock.patch('nova.accelerator.cyborg._CyborgClient.get_arqs_for_instance')
     def test_power_on_with_accels(self, mock_get_arqs,
             mock_power_on, mock_nw_info, mock_blockdev):
