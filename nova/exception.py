@@ -143,8 +143,16 @@ class CinderConnectionFailed(NovaException):
     msg_fmt = _("Connection to cinder host failed: %(reason)s")
 
 
+class ManilaConnectionFailed(NovaException):
+    msg_fmt = _("Connection to manila host failed: %(reason)s")
+
+
 class UnsupportedCinderAPIVersion(NovaException):
     msg_fmt = _('Nova does not support Cinder API version %(version)s')
+
+
+class UnsupportedManilaAPIVersion(NovaException):
+    msg_fmt = _('Nova does not support Manila API version %(version)s')
 
 
 class CinderAPIVersionNotAvailable(NovaException):
@@ -473,6 +481,11 @@ class InstanceInvalidState(Invalid):
                 "%(method)s while the instance is in this state.")
 
 
+class InstanceRequireExtraSpec(Invalid):
+    msg_fmt = _("Instance %(instance_uuid)s %(attr)s %(state)s. Cannot "
+                "%(method)s require extra spec parameters.")
+
+
 class InstanceNotRunning(Invalid):
     msg_fmt = _("Instance %(instance_id)s is not running.")
 
@@ -683,6 +696,30 @@ class VolumeAttachmentNotFound(NotFound):
 
 class VolumeNotFound(NotFound):
     msg_fmt = _("Volume %(volume_id)s could not be found.")
+
+
+class ShareNotFound(NotFound):
+    msg_fmt = _("Share %(share_id)s could not be found.")
+
+
+class ShareMappingAlreadyExists(NotFound):
+    msg_fmt = _("Share %(share_id)s already associated to this server.")
+
+
+class ShareProtocolUnknown(NotFound):
+    msg_fmt = _("Share protocol %(share_proto)s is unknown.")
+
+
+class ShareUmountError(NovaException):
+    msg_fmt = _("Share id %(share_id)s umount error.")
+
+
+class ShareMountError(NovaException):
+    msg_fmt = _("Share id %(share_id)s mount error.")
+
+
+class AccessNotFound(NotFound):
+    msg_fmt = _("Access %(access_id)s could not be found.")
 
 
 class VolumeTypeNotFound(NotFound):
