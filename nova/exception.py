@@ -143,8 +143,16 @@ class CinderConnectionFailed(NovaException):
     msg_fmt = _("Connection to cinder host failed: %(reason)s")
 
 
+class ManilaConnectionFailed(NovaException):
+    msg_fmt = _("Connection to manila service failed: %(reason)s")
+
+
 class UnsupportedCinderAPIVersion(NovaException):
     msg_fmt = _('Nova does not support Cinder API version %(version)s')
+
+
+class UnsupportedManilaAPIVersion(NovaException):
+    msg_fmt = _('Nova does not support Manila API version %(version)s')
 
 
 class CinderAPIVersionNotAvailable(NovaException):
@@ -704,6 +712,14 @@ class ShareNotFound(NotFound):
     msg_fmt = _("Share %(share_id)s could not be found.")
 
 
+class ShareMappingAlreadyExists(NotFound):
+    msg_fmt = _("Share %(share_id)s already associated to this server.")
+
+
+class ShareProtocolUnknown(NotFound):
+    msg_fmt = _("Share protocol %(share_proto)s is unknown.")
+
+
 class ShareUmountError(NovaException):
     msg_fmt = _("Share id %(share_id)s umount error "
                 "from server %(server_id)s.\n"
@@ -713,6 +729,23 @@ class ShareUmountError(NovaException):
 class ShareMountError(NovaException):
     msg_fmt = _("Share id %(share_id)s mount error "
                 "from server %(server_id)s.\n"
+                "Reason: %(reason)s.")
+
+
+class ShareAccessNotFound(NotFound):
+    msg_fmt = _("Share access from Manila could not be found for "
+                "share id %(share_id)s.")
+
+
+class ShareAccessGrantError(NovaException):
+    msg_fmt = _("Share access could not be granted to "
+                "share id %(share_id)s.\n"
+                "Reason: %(reason)s.")
+
+
+class ShareAccessRemovalError(NovaException):
+    msg_fmt = _("Share access could not be removed from "
+                "share id %(share_id)s.\n"
                 "Reason: %(reason)s.")
 
 

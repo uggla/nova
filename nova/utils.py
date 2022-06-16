@@ -992,7 +992,7 @@ def get_sdk_adapter(service_type, check_service=False):
         raise exception.ServiceUnavailable(
             _("The %(service_type)s service is unavailable: %(error)s") %
             {'service_type': service_type, 'error': str(e)})
-    return getattr(conn, service_type)
+    return getattr(conn, service_type.replace('-', '_'))
 
 
 def get_endpoint(ksa_adapter):
