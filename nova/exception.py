@@ -685,6 +685,10 @@ class VolumeNotFound(NotFound):
     msg_fmt = _("Volume %(volume_id)s could not be found.")
 
 
+class ShareNotFound(NotFound):
+    msg_fmt = _("Share %(share_id)s could not be found.")
+
+
 class VolumeTypeNotFound(NotFound):
     msg_fmt = _("Volume type %(id_or_name)s could not be found.")
 
