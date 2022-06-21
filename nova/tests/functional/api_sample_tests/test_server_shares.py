@@ -136,6 +136,26 @@ class ServerSharesJsonTest(ServerSharesBase):
         self.assertIn("Share fake_uuid could not be found", response.text)
         return uuid
 
+    def test_server_shares_create_fails_compute_version(self):
+        """Verify we can not create a share if the compute if was not updated
+        to a supported version.
+        """
+        uuid = self.create_server_ok()
+        subs = self._get_create_subs()
+        with mock.patch(
+            'nova.objects.service'
+            '.get_minimum_version_all_cells',
+            return_value=60
+        ):
+            response = self._do_post('servers/%s/shares' % uuid,
+                                    'server-shares-create-req', subs)
+            self.assertEqual(403, response.status_code)
+            self.assertIn(
+                "Feature not supported until computes have not been updated",
+                response.text
+            )
+        return uuid
+
     def test_server_shares_index(self):
         """Verify we can list shares.
         """
@@ -144,6 +164,24 @@ class ServerSharesJsonTest(ServerSharesBase):
         response = self._do_get('servers/%s/shares' % uuid)
         self._verify_response('server-shares-create-resp',
                 subs, response, 200)
+
+    def test_server_shares_index_fails_compute_version(self):
+        """Verify we can not get shares index if the compute if was not updated
+        to a supported version.
+        """
+        uuid = self.create_server_ok()
+        with mock.patch(
+            'nova.objects.service'
+            '.get_minimum_version_all_cells',
+            return_value=60
+        ):
+            response = self._do_get('servers/%s/shares' % uuid)
+            self.assertEqual(403, response.status_code)
+            self.assertIn(
+                "Feature not supported until computes have not been updated",
+                response.text
+            )
+        return uuid
 
     def test_server_shares_index_unknown_uuid(self):
         """Verify we can list shares on an unknown uuid
@@ -164,6 +202,26 @@ class ServerSharesJsonTest(ServerSharesBase):
         self._verify_response('server-shares-show-resp',
                 subs, response, 200)
 
+    def test_server_shares_show_fails_compute_version(self):
+        """Verify we can not show a share if the compute if was not updated
+        to a supported version.
+        """
+        uuid = self.create_server_ok()
+        subs = self._get_create_subs()
+        with mock.patch(
+            'nova.objects.service'
+            '.get_minimum_version_all_cells',
+            return_value=60
+        ):
+            response = self._do_get(
+                    'servers/%s/shares/%s' % (uuid, subs['shareId']))
+            self.assertEqual(403, response.status_code)
+            self.assertIn(
+                "Feature not supported until computes have not been updated",
+                response.text
+            )
+        return uuid
+
     @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
     def test_server_shares_delete(self, mock_resolver):
         """Verify we can delete share.
@@ -173,6 +231,26 @@ class ServerSharesJsonTest(ServerSharesBase):
         response = self._do_delete(
                 'servers/%s/shares/%s' % (uuid, subs['shareId']))
         self.assertEqual(200, response.status_code)
+
+    def test_server_shares_delete_fails_compute_version(self):
+        """Verify we can not delete a share if the compute if was not updated
+        to a supported version.
+        """
+        uuid = self.create_server_ok()
+        subs = self._get_create_subs()
+        with mock.patch(
+            'nova.objects.service'
+            '.get_minimum_version_all_cells',
+            return_value=60
+        ):
+            response = self._do_delete(
+                    'servers/%s/shares/%s' % (uuid, subs['shareId']))
+            self.assertEqual(403, response.status_code)
+            self.assertIn(
+                "Feature not supported until computes have not been updated",
+                response.text
+            )
+        return uuid
 
     def test_server_shares_delete_fails_unknown_uuid(self):
         """Verify we have an error if we want to remove an unknown share.

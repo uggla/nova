@@ -119,6 +119,8 @@ MIN_COMPUTE_INT_ATTACH_WITH_EXTENDED_RES_REQ = 60
 
 SUPPORT_VNIC_TYPE_REMOTE_MANAGED = 61
 
+SUPPORT_SHARES = 62
+
 # FIXME(danms): Keep a global cache of the cells we find the
 # first time we look. This needs to be refreshed on a timer or
 # trigger.
@@ -360,6 +362,26 @@ def block_port_accelerators():
             return func(self, context, instance, *args, **kwargs)
         return wrapper
     return inner
+
+
+def block_shares_not_supported():
+    def inner(func):
+        @functools.wraps(func)
+        def wrapper(self, context, instance, *args, **kwargs):
+            check_shares_supported()
+            return func(self, context, instance, *args, **kwargs)
+        return wrapper
+    return inner
+
+
+def check_shares_supported():
+    service_support = False
+    min_version = objects.service.get_minimum_version_all_cells(
+        nova_context.get_admin_context(), ['nova-compute'])
+    if min_version >= SUPPORT_SHARES:
+        service_support = True
+    if not service_support:
+        raise exception.ForbiddenSharesNotSupported()
 
 
 def block_extended_resource_request(function):

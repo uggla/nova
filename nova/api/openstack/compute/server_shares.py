@@ -84,6 +84,7 @@ class ServerSharesController(wsgi.Controller):
 
     @wsgi.Controller.api_version("2.92")
     @wsgi.response(200)
+    @wsgi.expected_errors(403)
     def index(self, req, server_id):
         context = req.environ["nova.context"]
         # Get instance mapping to query the required cell database
@@ -91,15 +92,21 @@ class ServerSharesController(wsgi.Controller):
         context.can(ss_policies.POLICY_ROOT % 'index',
                     target={'project_id': im.project_id})
 
-        with nova_context.target_cell(context, im.cell_mapping) as cctxt:
-            db_shares = ShareMappingList.get_by_instance_uuid(
-                cctxt, server_id)
+        try:
+            compute.check_shares_supported()
+
+            with nova_context.target_cell(context, im.cell_mapping) as cctxt:
+                db_shares = ShareMappingList.get_by_instance_uuid(
+                    cctxt, server_id)
+
+        except (exception.ForbiddenSharesNotSupported) as e:
+            raise webob.exc.HTTPForbidden(explanation=e.format_message())
 
         return self._view_builder._list_view(db_shares)
 
     @wsgi.Controller.api_version("2.92")
     @wsgi.response(201)
-    @wsgi.expected_errors((400, 404, 409))
+    @wsgi.expected_errors((400, 403, 404, 409))
     @validation.schema(schema.create, min_version='2.92')
     def create(self, req, server_id, body):
         def share_mapping_exists(context, server_id, share_id):
@@ -133,6 +140,7 @@ class ServerSharesController(wsgi.Controller):
                     server_id,
                     "create share")
             try:
+                compute.check_shares_supported()
                 # Check if this share mapping already exists in the database.
                 # Prevent user error, requesting an already associated share.
                 if share_mapping_exists(cctxt, server_id, share_id):
@@ -176,12 +184,14 @@ class ServerSharesController(wsgi.Controller):
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
             except (exception.ShareMappingAlreadyExists) as e:
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotSupported) as e:
+                raise webob.exc.HTTPForbidden(explanation=e.format_message())
 
         return view
 
     @wsgi.Controller.api_version("2.92")
     @wsgi.response(200)
-    @wsgi.expected_errors((400, 404))
+    @wsgi.expected_errors((400, 403, 404))
     def show(self, req, server_id, id):
         context = req.environ["nova.context"]
         # Get instance mapping to query the required cell database
@@ -190,6 +200,8 @@ class ServerSharesController(wsgi.Controller):
                     target={'project_id': im.project_id})
 
         try:
+            compute.check_shares_supported()
+
             with nova_context.target_cell(context, im.cell_mapping) as cctxt:
                 share = ShareMapping.get_by_instance_uuid_and_share_id(
                     cctxt,
@@ -200,12 +212,14 @@ class ServerSharesController(wsgi.Controller):
 
         except (exception.ShareNotFound) as e:
             raise webob.exc.HTTPNotFound(explanation=e.format_message())
+        except (exception.ForbiddenSharesNotSupported) as e:
+            raise webob.exc.HTTPForbidden(explanation=e.format_message())
 
         return view
 
     @wsgi.Controller.api_version("2.92")
     @wsgi.response(200)
-    @wsgi.expected_errors((400, 404, 409))
+    @wsgi.expected_errors((400, 403, 404, 409))
     def delete(self, req, server_id, id):
         context = req.environ["nova.context"]
         # Get instance mapping to query the required cell database
@@ -219,6 +233,7 @@ class ServerSharesController(wsgi.Controller):
                     server_id,
                     "delete share")
             try:
+                compute.check_shares_supported()
 
                 share = ShareMapping.get_by_instance_uuid_and_share_id(
                     cctxt,
@@ -242,3 +257,5 @@ class ServerSharesController(wsgi.Controller):
                 raise webob.exc.HTTPNotFound(explanation=e.format_message())
             except (exception.UnsupportedManilaAPIVersion) as e:
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotSupported) as e:
+                raise webob.exc.HTTPForbidden(explanation=e.format_message())
