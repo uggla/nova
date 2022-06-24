@@ -16,8 +16,8 @@ from nova.api.openstack.compute import server_shares
 from nova.compute import vm_states
 from nova import context
 from nova import objects
-from nova import test
 from nova.tests.unit.api.openstack import fakes
+from nova.tests.unit.compute.test_compute import BaseTestCase
 from nova.tests.unit import fake_instance
 from oslo_utils import timeutils
 
@@ -38,7 +38,7 @@ def return_invalid_server(compute_api, context, instance_id,
                                            vm_state=vm_states.BUILDING)
 
 
-class ServerSharesTest(test.TestCase):
+class ServerSharesTest(BaseTestCase):
     wsgi_api_version = '2.92'
 
     def setUp(self):

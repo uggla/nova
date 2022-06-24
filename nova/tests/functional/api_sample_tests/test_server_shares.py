@@ -12,6 +12,7 @@
 
 from nova import exception
 from nova.tests import fixtures as nova_fixtures
+from nova.tests.functional.api import client
 from nova.tests.functional.api_sample_tests import test_servers
 from oslo_utils.fixture import uuidsentinel
 from unittest import mock
@@ -303,3 +304,40 @@ class ServerSharesJsonAdminTest(ServerSharesBase):
                 'servers/%s/shares/%s' % (uuid, subs['shareId']))
         self._verify_response('server-shares-admin-show-resp',
                 subs, response, 200)
+
+    def _block_action(self, body):
+        uuid = self._post_server_shares()
+
+        ex = self.assertRaises(
+            client.OpenStackApiException,
+            self.api.post_server_action,
+            uuid,
+            body
+        )
+
+        self.assertEqual(409, ex.response.status_code)
+        self.assertIn(
+            "Feature not supported with instances that have shares.",
+            ex.response.text
+        )
+
+    def test_shelve_server_with_share_fails(self):
+        self._block_action({"shelve": None})
+
+    def test_evacuate_server_with_share_fails(self):
+        self._block_action({"evacuate": {}})
+
+    def test_resize_server_with_share_fails(self):
+        self._block_action({"resize": {"flavorRef": "2"}})
+
+    def test_migrate_server_with_share_fails(self):
+        self._block_action({"migrate": None})
+
+    def test_live_migrate_server_with_share_fails(self):
+        self._block_action(
+            {"os-migrateLive": {
+                "host": None,
+                "block_migration": "auto"
+                }
+             }
+        )
