@@ -2214,6 +2214,11 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                 <alias name='net0'/>
                 <address type='ccw' cssid='0xfe' ssid='0x0' devno='0x0001'/>
             </interface>
+            <filesystem type="mount" accessmode='passthrough'>
+              <driver type='virtiofs'/>
+              <source dir="/mnt/nfsmount"/>
+              <target dir="33714a70-38d5-40d6-88e4-a382ae1c6dfe"/>
+            </filesystem>
             <hostdev mode="subsystem" type="pci" managed="yes">
                 <source>
                     <address bus="0x06" domain="0x0000" function="0x1"
@@ -2308,11 +2313,29 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         instance_ref.info_cache = objects.InstanceInfoCache(
             network_info=network_info)
 
+        fake_share_mapping = {
+            'created_at': None,
+            'updated_at': None,
+            # 'deleted_at': None,
+            # 'deleted': False,
+            'id': 1,
+            'uuid': uuids.share_mapping,
+            'instance_uuid': uuids.instance,
+            'share_id': '33714a70-38d5-40d6-88e4-a382ae1c6dfe',
+            'status': 'inactive',
+            'tag': '33714a70-38d5-40d6-88e4-a382ae1c6dfe',
+            'export_location': '192.168.122.152:/manila/share',
+            'share_proto': 'NFS',
+            }
+
         with test.nested(
             mock.patch('nova.objects.VirtualInterfaceList'
                        '.get_by_instance_uuid', return_value=vifs),
             mock.patch('nova.objects.BlockDeviceMappingList'
                        '.get_by_instance_uuid', return_value=bdms),
+            mock.patch(
+                'nova.db.main.api.share_mapping_get_by_instance_uuid',
+                return_value=[fake_share_mapping]),
             mock.patch('nova.virt.libvirt.host.Host.get_guest',
                        return_value=guest),
             mock.patch.object(nova.virt.libvirt.guest.Guest, 'get_xml_desc',
@@ -2322,7 +2345,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             metadata_obj = drvr._build_device_metadata(self.context,
                                                        instance_ref)
             metadata = metadata_obj.devices
-            self.assertEqual(11, len(metadata))
+            self.assertEqual(12, len(metadata))
             self.assertIsInstance(metadata[0],
                                   objects.DiskMetadata)
             self.assertIsInstance(metadata[0].bus,
@@ -2385,10 +2408,16 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             self.assertEqual(['mytag3'], metadata[9].tags)
             self.assertFalse(metadata[9].vf_trusted)
             self.assertIsInstance(metadata[10],
+                                  objects.ShareMetadata)
+            self.assertEqual(
+                '33714a70-38d5-40d6-88e4-a382ae1c6dfe', metadata[10].share_id)
+            self.assertEqual(
+                '33714a70-38d5-40d6-88e4-a382ae1c6dfe', metadata[10].tag)
+            self.assertIsInstance(metadata[11],
                                   objects.NetworkInterfaceMetadata)
-            self.assertEqual(['pf_tag'], metadata[10].tags)
-            self.assertEqual('da:d1:f2:91:95:c1', metadata[10].mac)
-            self.assertEqual('0000:06:00.1', metadata[10].bus.address)
+            self.assertEqual(['pf_tag'], metadata[11].tags)
+            self.assertEqual('da:d1:f2:91:95:c1', metadata[11].mac)
+            self.assertEqual('0000:06:00.1', metadata[11].bus.address)
 
     @mock.patch.object(host.Host, 'get_connection')
     @mock.patch.object(nova.virt.libvirt.guest.Guest, 'get_xml_desc')
