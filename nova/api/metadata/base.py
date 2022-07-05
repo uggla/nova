@@ -426,6 +426,10 @@ class InstanceMetadata(object):
                         device_metadata['serial'] = device.serial
                     if 'path' in device:
                         device_metadata['path'] = device.path
+                elif isinstance(device, metadata_obj.ShareMetadata):
+                    device_metadata['type'] = 'share'
+                    device_metadata['share_id'] = device.share_id
+                    device_metadata['tag'] = device.tag
                 else:
                     LOG.debug('Metadata for device of unknown type %s has not '
                               'been included in the '
