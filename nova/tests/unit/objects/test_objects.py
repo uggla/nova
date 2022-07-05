@@ -1137,6 +1137,7 @@ object_data = {
     'ServiceList': '1.19-5325bce13eebcbf22edc9678285270cc',
     'ShareMapping': '1.0-5ed0db9b97582e84d582c0b8488aa5df',
     'ShareMappingList': '1.0-634980d5efdf3656e28c8dec3d862ab9',
+    'ShareMetadata': '1.0-09f69ac0bd47371417b5477a277e43af',
     'Tag': '1.1-8b8d7d5b48887651a0e01241672e2963',
     'TagList': '1.1-55231bdb671ecf7641d6a2e9109b5d8e',
     'TaskLog': '1.0-78b0534366f29aa3eebb01860fbe18fe',
