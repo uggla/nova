@@ -1138,6 +1138,7 @@ object_data = {
     'ShareMapping': '1.0-f7c5536a70ddb691d80c633fca3ddd59',
     'ShareMappingList': '1.0-634980d5efdf3656e28c8dec3d862ab9',
     'ShareMappingLibvirtNFS': '1.0-f7c5536a70ddb691d80c633fca3ddd59',
+    'ShareMetadata': '1.0-09f69ac0bd47371417b5477a277e43af',
     'Tag': '1.1-8b8d7d5b48887651a0e01241672e2963',
     'TagList': '1.1-55231bdb671ecf7641d6a2e9109b5d8e',
     'TaskLog': '1.0-78b0534366f29aa3eebb01860fbe18fe',
