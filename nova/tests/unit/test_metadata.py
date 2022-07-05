@@ -198,11 +198,15 @@ def fake_metadata_objects():
         mac='00:00:00:00:00:00',
         tags=['foo']
     )
+    share_obj = metadata_obj.ShareMetadata(
+        share_id='ca3c176e-fd5a-438b-b595-e18a358f6909',
+        tag='my_share_tag'
+    )
     mdlist = metadata_obj.InstanceDeviceMetadata(
         instance_uuid='b65cee2f-8c69-4aeb-be2f-f79742548fc2',
         devices=[nic_obj, ide_disk_obj, scsi_disk_obj, usb_disk_obj,
                  fake_device_obj, device_with_fake_bus_obj, nic_vlans_obj,
-                 nic_vf_trusted_obj])
+                 nic_vf_trusted_obj, share_obj])
     return mdlist
 
 
@@ -236,6 +240,13 @@ def fake_metadata_dicts(include_vlan=False, include_vf_trusted=False):
         'path': '/dev/sda',
         'tags': ['baz'],
     }
+    share_meta = {
+        'type': 'share',
+        'bus': 'none',
+        'address': 'none',
+        'share_id': 'ca3c176e-fd5a-438b-b595-e18a358f6909',
+        'tag': 'my_share_tag',
+    }
 
     scsi_disk_meta = copy.copy(ide_disk_meta)
     scsi_disk_meta['bus'] = 'scsi'
@@ -254,6 +265,7 @@ def fake_metadata_dicts(include_vlan=False, include_vf_trusted=False):
         nic_meta['vf_trusted'] = False
         vlan_nic_meta['vf_trusted'] = False
         vf_trusted_nic_meta['vf_trusted'] = True
+    dicts.append(share_meta)
     return dicts
 
 
