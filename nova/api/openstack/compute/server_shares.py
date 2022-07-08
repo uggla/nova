@@ -19,10 +19,12 @@ from nova.api.openstack.compute.views import server_shares
 from nova.api.openstack import wsgi
 from nova.api import validation
 from nova.compute import api as compute
+from nova.compute import utils
 from nova.compute import vm_states
 from nova import context as nova_context
 from nova import exception
 from nova import objects
+from nova.objects import fields
 from nova.objects.share_mapping import ShareMapping
 from nova.objects.share_mapping import ShareMappingList
 from nova.policies import server_shares as ss_policies
@@ -130,16 +132,18 @@ class ServerSharesController(wsgi.Controller):
         share_id = share_dict.get('shareId')
         share_tag = share_dict.get('tag')
         with nova_context.target_cell(context, im.cell_mapping) as cctxt:
-            self._check_instance_in_valid_state(
+            instance = self._check_instance_in_valid_state(
                     cctxt,
                     server_id,
                     "create share")
 
-            self._check_instance_extra_specs(
-                    cctxt,
-                    server_id,
-                    "create share")
+            # TODO(uggla) Review and uncomment this check
+            # self._check_instance_extra_specs(
+            #         cctxt,
+            #         server_id,
+            #         "create share")
             try:
+                __import__('pdb').set_trace()
                 compute.check_shares_supported()
                 # Check if this share mapping already exists in the database.
                 # Prevent user error, requesting an already associated share.
@@ -175,7 +179,23 @@ class ServerSharesController(wsgi.Controller):
                             self._get_instance_host_ip(cctxt, server_id),
                             'rw')
 
+                utils.notify_about_share_attach_detach(
+                    cctxt,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_ATTACH,
+                    phase=fields.NotificationPhase.START,
+                    share_info=db_share
+                )
                 db_share.attach(db_share.status)
+                utils.notify_about_share_attach_detach(
+                    cctxt,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_ATTACH,
+                    phase=fields.NotificationPhase.END,
+                    share_info=db_share
+                )
                 view = self._view_builder._show_view(cctxt, db_share)
 
             except (exception.ShareNotFound) as e:

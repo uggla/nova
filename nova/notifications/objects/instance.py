@@ -19,6 +19,7 @@ from nova.objects import fields
 
 
 CONF = nova.conf.CONF
+SHARE_MAPPING_STATUSES = ['active', 'inactive', 'error']
 
 
 @nova_base.NovaObjectRegistry.register_notification
@@ -185,6 +186,32 @@ class InstanceActionVolumePayload(InstanceActionPayload):
                 instance=instance,
                 fault=fault)
         self.volume_id = volume_id
+
+
+@nova_base.NovaObjectRegistry.register_notification
+class InstanceActionSharePayload(InstanceActionPayload):
+    # Version 1.0: Initial version
+    VERSION = '1.0'
+    fields = {
+        'instance_uuid': fields.UUIDField(),
+        'uuid': fields.UUIDField(),
+        'share_id': fields.UUIDField(),
+        'status': fields.EnumField(valid_values=SHARE_MAPPING_STATUSES),
+        'tag': fields.StringField(nullable=False),
+        'export_location': fields.StringField(nullable=False)
+    }
+
+    def __init__(self, context, instance, fault, share_info):
+        super(InstanceActionSharePayload, self).__init__(
+            context=context,
+            instance=instance,
+            fault=fault)
+        self.instance_uuid = share_info.instance_uuid
+        self.uuid = share_info.uuid
+        self.share_id = share_info.share_id
+        self.status = share_info.status
+        self.tag = share_info.tag
+        self.export_location = share_info.export_location
 
 
 @nova_base.NovaObjectRegistry.register_notification
@@ -605,6 +632,16 @@ class InstanceActionVolumeNotification(base.NotificationBase):
 
     fields = {
         'payload': fields.ObjectField('InstanceActionVolumePayload')
+    }
+
+
+@nova_base.NovaObjectRegistry.register_notification
+class InstanceActionShareNotification(base.NotificationBase):
+    # Version 1.0: Initial version
+    VERSION = '1.0'
+
+    fields = {
+        'payload': fields.ObjectField('InstanceActionSharePayload')
     }
 
 
