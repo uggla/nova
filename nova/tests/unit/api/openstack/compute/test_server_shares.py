@@ -15,6 +15,7 @@ from nova.compute import vm_states
 from nova import context
 from nova.db.main import models
 from nova import objects
+from nova.objects import fields
 from nova.tests.unit.api.openstack import fakes
 from nova.tests.unit.compute.test_compute import BaseTestCase
 from nova.tests.unit import fake_instance
@@ -144,12 +145,17 @@ class ServerSharesTest(BaseTestCase):
     @mock.patch(
         'nova.virt.hardware.check_shares_supported', return_value=None
     )
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.db.main.api.share_mapping_update')
     @mock.patch('nova.api.openstack.common.get_instance')
     def test_create(
         self,
         mock_get_instance,
         mock_db_update_share,
+        mock_notifications,
         mock_shares_support,
         mock_resolver
     ):
@@ -179,6 +185,26 @@ class ServerSharesTest(BaseTestCase):
 
         mock_db_update_share.return_value = fake_db_share
         self.controller.create(self.req, instance.uuid, body=body)
+
+        mock_notifications.assert_has_calls([
+            mock.call(
+                mock.ANY,
+                instance,
+                instance.host,
+                action=fields.NotificationAction.SHARE_ATTACH,
+                phase=fields.NotificationPhase.START,
+                share_id=fake_db_share['share_id']
+            ),
+            mock.call(
+                mock.ANY,
+                instance,
+                instance.host,
+                action=fields.NotificationAction.SHARE_ATTACH,
+                phase=fields.NotificationPhase.END,
+                share_id=fake_db_share['share_id']
+            ),
+        ])
+
         mock_db_update_share.assert_called_once_with(
             mock.ANY,
             mock.ANY,
