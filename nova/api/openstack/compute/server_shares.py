@@ -20,6 +20,7 @@ from nova.api.openstack.compute.views import server_shares
 from nova.api.openstack import wsgi
 from nova.api import validation
 from nova.compute import api as compute
+from nova.compute import utils
 from nova.compute import vm_states
 from nova import context as nova_context
 from nova import exception
@@ -153,9 +154,26 @@ class ServerSharesController(wsgi.Controller):
                     manila_share_data.export_location)
                 share_mapping.share_proto = manila_share_data.share_proto
 
+                utils.notify_about_share_attach_detach(
+                    cctxt,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_ATTACH,
+                    phase=fields.NotificationPhase.START,
+                    share_id=share_mapping.share_id
+                )
+
                 share_mapping.create()
                 self.compute_api.mount_share(cctxt, instance, share_mapping)
 
+                utils.notify_about_share_attach_detach(
+                    cctxt,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_ATTACH,
+                    phase=fields.NotificationPhase.END,
+                    share_id=share_mapping.share_id
+                )
                 view = self._view_builder._show_view(cctxt, share_mapping)
 
             except (exception.ShareNotFound) as e:
