@@ -15,6 +15,7 @@ from nova.compute import vm_states
 from nova import context
 from nova.db.main import models
 from nova import objects
+from nova.objects import fields
 from nova.tests.unit.api.openstack import fakes
 from nova.tests.unit.compute.test_compute import BaseTestCase
 from nova.tests.unit import fake_instance
@@ -145,6 +146,10 @@ class ServerSharesTest(BaseTestCase):
         'nova.virt.hardware.check_shares_supported', return_value=None
     )
     @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
+    @mock.patch(
         'nova.db.main.api.share_mapping_get_by_instance_uuid_and_share_id'
     )
     @mock.patch('nova.db.main.api.share_mapping_update')
@@ -154,6 +159,7 @@ class ServerSharesTest(BaseTestCase):
         mock_get_instance,
         mock_db_update_share,
         mock_db_get_share,
+        mock_notifications,
         mock_shares_support,
         mock_mount
     ):
@@ -185,6 +191,25 @@ class ServerSharesTest(BaseTestCase):
         mock_db_get_share.side_effect = [None, fake_db_share]
         self.controller.create(self.req, instance.uuid, body=body)
 
+        mock_notifications.assert_has_calls([
+            mock.call(
+                mock.ANY,
+                instance,
+                instance.host,
+                action=fields.NotificationAction.SHARE_ATTACH,
+                phase=fields.NotificationPhase.START,
+                share_id=fake_db_share['share_id']
+            ),
+            mock.call(
+                mock.ANY,
+                instance,
+                instance.host,
+                action=fields.NotificationAction.SHARE_ATTACH,
+                phase=fields.NotificationPhase.END,
+                share_id=fake_db_share['share_id']
+            ),
+        ])
+
         mock_mount.assert_called_once()
         self.assertIsInstance(
             mock_mount.call_args.args[1], objects.instance.Instance)
@@ -209,6 +234,10 @@ class ServerSharesTest(BaseTestCase):
     @mock.patch(
         'nova.virt.hardware.check_shares_supported', return_value=None
     )
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.db.main.api.'
             'share_mapping_delete_by_instance_uuid_and_share_id')
     @mock.patch('nova.db.main.api.'
@@ -219,6 +248,7 @@ class ServerSharesTest(BaseTestCase):
         mock_get_instance,
         mock_db_get_shares,
         mock_db_delete_share,
+        mock_notifications,
         mock_shares_support,
         mock_umount
     ):
