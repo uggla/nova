@@ -15,6 +15,7 @@ from nova.compute import vm_states
 from nova import context
 from nova.db.main import models
 from nova import objects
+from nova.objects import fields
 from nova.tests.unit.api.openstack import fakes
 from nova.tests.unit.compute.test_compute import BaseTestCase
 from nova.tests.unit import fake_instance
@@ -184,6 +185,26 @@ class ServerSharesTest(BaseTestCase):
 
         mock_db_update_share.return_value = fake_db_share
         self.controller.create(self.req, instance.uuid, body=body)
+
+        mock_notifications.assert_has_calls([
+            mock.call(
+                mock.ANY,
+                instance,
+                instance.host,
+                action=fields.NotificationAction.SHARE_ATTACH,
+                phase=fields.NotificationPhase.START,
+                share_id=fake_db_share['share_id']
+            ),
+            mock.call(
+                mock.ANY,
+                instance,
+                instance.host,
+                action=fields.NotificationAction.SHARE_ATTACH,
+                phase=fields.NotificationPhase.END,
+                share_id=fake_db_share['share_id']
+            ),
+        ])
+
         mock_db_update_share.assert_called_once_with(
             mock.ANY,
             mock.ANY,
