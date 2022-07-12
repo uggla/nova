@@ -1701,16 +1701,33 @@ class TestInstanceNotificationSample(
         self._wait_for_state_change(server, expected_status='SHUTOFF')
         self.notifier.reset()
 
-        self._attach_share_to_server(
-            server, 'e8debdc0-447a-4376-a10a-4cd9122d7986')
-        # self.assertEqual(2, len(self.notifier.versioned_notifications),
-        #                  self.notifier.versioned_notifications)
-        # self._verify_notification(
-        #     'instance-shelve-start',
-        #     replacements={
-        #         'reservation_id': server['reservation_id'],
-        #         'uuid': server['id']},
-        #     actual=self.notifier.versioned_notifications[1])
+        # Return a constant share uuid
+        with mock.patch(
+                'oslo_utils.uuidutils.generate_uuid',
+                return_value='f7c1726d-7622-42b3-8b2c-4473239d60d1'):
+            self._attach_share_to_server(
+                server, 'e8debdc0-447a-4376-a10a-4cd9122d7986')
+
+        self.assertEqual(2, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        self._verify_notification(
+            'instance-share_attach-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'share_instance_uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown'},
+            actual=self.notifier.versioned_notifications[0])
+        self._verify_notification(
+            'instance-share_attach-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'share_instance_uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown'},
+            actual=self.notifier.versioned_notifications[1])
 
         # Restart server
         self.api.post_server_action(server['id'], {'os-start': {}})

@@ -193,12 +193,12 @@ class InstanceActionSharePayload(InstanceActionPayload):
     # Version 1.0: Initial version
     VERSION = '1.0'
     fields = {
-        'instance_uuid': fields.UUIDField(),
-        'uuid': fields.UUIDField(),
+        'share_instance_uuid': fields.UUIDField(),
+        'share_uuid': fields.UUIDField(),
         'share_id': fields.UUIDField(),
-        'status': fields.EnumField(valid_values=SHARE_MAPPING_STATUSES),
-        'tag': fields.StringField(nullable=False),
-        'export_location': fields.StringField(nullable=False)
+        'share_status': fields.EnumField(valid_values=SHARE_MAPPING_STATUSES),
+        'share_tag': fields.StringField(nullable=False),
+        'share_export_location': fields.StringField(nullable=False)
     }
 
     def __init__(self, context, instance, fault, share_info):
@@ -206,12 +206,12 @@ class InstanceActionSharePayload(InstanceActionPayload):
             context=context,
             instance=instance,
             fault=fault)
-        self.instance_uuid = share_info.instance_uuid
-        self.uuid = share_info.uuid
+        self.share_instance_uuid = share_info.instance_uuid
+        self.share_uuid = share_info.uuid
         self.share_id = share_info.share_id
-        self.status = share_info.status
-        self.tag = share_info.tag
-        self.export_location = share_info.export_location
+        self.share_status = share_info.status
+        self.share_tag = share_info.tag
+        self.share_export_location = share_info.export_location
 
 
 @nova_base.NovaObjectRegistry.register_notification
@@ -635,6 +635,8 @@ class InstanceActionVolumeNotification(base.NotificationBase):
     }
 
 
+@base.notification_sample('instance-share_attach-start.json')
+@base.notification_sample('instance-share_attach-end.json')
 @nova_base.NovaObjectRegistry.register_notification
 class InstanceActionShareNotification(base.NotificationBase):
     # Version 1.0: Initial version

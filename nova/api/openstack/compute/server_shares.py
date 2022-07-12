@@ -128,6 +128,8 @@ class ServerSharesController(wsgi.Controller):
         context.can(ss_policies.POLICY_ROOT % 'create',
                     target={'project_id': im.project_id})
 
+        compute.check_shares_supported()
+
         share_dict = body['share']
         share_id = share_dict.get('shareId')
         share_tag = share_dict.get('tag')
@@ -143,8 +145,7 @@ class ServerSharesController(wsgi.Controller):
             #         server_id,
             #         "create share")
             try:
-                __import__('pdb').set_trace()
-                compute.check_shares_supported()
+                # compute.check_shares_supported()
                 # Check if this share mapping already exists in the database.
                 # Prevent user error, requesting an already associated share.
                 if share_mapping_exists(cctxt, server_id, share_id):
