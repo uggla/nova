@@ -76,10 +76,13 @@ class ServerSharesTest(BaseTestCase):
                     projects=[]),
                 vm_state=vm_states.STOPPED)
 
+    @mock.patch(
+        'nova.virt.hardware.check_shares_supported', return_value=None
+    )
     @mock.patch('nova.db.main.api.share_mapping_get_by_instance_uuid')
     @mock.patch('nova.api.openstack.common.get_instance')
     def test_index(
-            self, mock_get_instance, mock_db_get_shares
+            self, mock_get_instance, mock_db_get_shares, mock_shares_support
     ):
         timeutils.set_time_override()
         NOW = timeutils.utcnow()
@@ -203,6 +206,9 @@ class ServerSharesTest(BaseTestCase):
         )
 
     @mock.patch('nova.compute.api.API.umount_share')
+    @mock.patch(
+        'nova.virt.hardware.check_shares_supported', return_value=None
+    )
     @mock.patch('nova.db.main.api.'
             'share_mapping_delete_by_instance_uuid_and_share_id')
     @mock.patch('nova.db.main.api.'
@@ -213,6 +219,7 @@ class ServerSharesTest(BaseTestCase):
         mock_get_instance,
         mock_db_get_shares,
         mock_db_delete_share,
+        mock_shares_support,
         mock_umount
     ):
         instance = self.fake_get_instance()
