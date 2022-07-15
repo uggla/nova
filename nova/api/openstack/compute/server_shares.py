@@ -27,6 +27,7 @@ from nova import objects
 from nova.objects import fields
 from nova.policies import server_shares as ss_policies
 from nova.share import manila
+from nova.virt import hardware as hw
 
 
 def _get_instance_mapping(context, server_id):
@@ -78,8 +79,13 @@ class ServerSharesController(wsgi.Controller):
 
         with nova_context.target_cell(context, im.cell_mapping) as cctxt:
             try:
-                db_shares = objects.ShareMappingList.get_by_instance_uuid(
+                instance = self._get_instance_from_server_uuid(
                     cctxt, server_id
+                )
+                hw.check_shares_supported(cctxt, instance)
+
+                db_shares = objects.ShareMappingList.get_by_instance_uuid(
+                        cctxt, server_id
                 )
 
             except (exception.ForbiddenSharesNotSupported) as e:
@@ -125,6 +131,7 @@ class ServerSharesController(wsgi.Controller):
             )
 
             try:
+                hw.check_shares_supported(cctxt, instance)
                 # Check if this share mapping already exists in the database.
                 # Prevent user error, requesting an already associated share.
                 if sm_exists():
@@ -163,6 +170,10 @@ class ServerSharesController(wsgi.Controller):
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
             except (exception.ShareMappingAlreadyExists) as e:
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotSupported) as e:
+                raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                raise webob.exc.HTTPConflict(explanation=e.format_message())
 
         return view
 
@@ -180,6 +191,10 @@ class ServerSharesController(wsgi.Controller):
 
         with nova_context.target_cell(context, im.cell_mapping) as cctxt:
             try:
+                instance = self._get_instance_from_server_uuid(
+                    cctxt, server_id
+                )
+                hw.check_shares_supported(cctxt, instance)
                 share = objects.ShareMapping.get_by_instance_uuid_and_share_id(
                     cctxt,
                     server_id,
@@ -190,6 +205,10 @@ class ServerSharesController(wsgi.Controller):
 
             except (exception.ShareNotFound) as e:
                 raise webob.exc.HTTPNotFound(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotSupported) as e:
+                raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                raise webob.exc.HTTPConflict(explanation=e.format_message())
 
         return view
 
@@ -212,6 +231,7 @@ class ServerSharesController(wsgi.Controller):
                 "delete share"
             )
             try:
+                hw.check_shares_supported(cctxt, instance)
                 share_mapping = (
                     objects.ShareMapping.get_by_instance_uuid_and_share_id(
                         cctxt, server_id, id
@@ -232,3 +252,7 @@ class ServerSharesController(wsgi.Controller):
                     explanation=e.format_message())
             except (exception.UnsupportedManilaAPIVersion) as e:
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotSupported) as e:
+                raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                raise webob.exc.HTTPConflict(explanation=e.format_message())
