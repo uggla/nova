@@ -389,18 +389,6 @@ def instance_has_share(context, instance):
         return db_shares
 
 
-def check_shares_supported():
-    """Check that all computes have been updated and support shares.
-    """
-    service_support = False
-    min_version = objects.service.get_minimum_version_all_cells(
-        nova_context.get_admin_context(), ['nova-compute'])
-    if min_version >= SUPPORT_SHARES:
-        service_support = True
-    if not service_support:
-        raise exception.ForbiddenSharesNotSupported()
-
-
 def block_extended_resource_request(function):
     @functools.wraps(function)
     def inner(self, context, instance, *args, **kwargs):

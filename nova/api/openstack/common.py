@@ -347,27 +347,6 @@ def raise_http_conflict_for_instance_invalid_state(exc, action, server_id):
     raise webob.exc.HTTPConflict(explanation=msg)
 
 
-def raise_http_conflict_for_instance_missing_extra_spec(
-        exc, action, server_id):
-    """Raises a webob.exc.HTTPConflict instance containing a message
-    appropriate to return via the API based on the original
-    InstanceRequireExtraSpec exception.
-    """
-    attr = exc.kwargs.get('attr')
-    state = exc.kwargs.get('state')
-    if attr is not None and state is not None:
-        msg = _("Cannot '%(action)s' instance %(server_id)s missing extra "
-                "specs. Current extra specs '%(attr)s %(state)s'") % {
-                        'action': action, 'attr': attr,
-                        'state': state,
-                        'server_id': server_id}
-    else:
-        # At least give some meaningful message
-        msg = _("Instance %(server_id)s missing extra specs for "
-                "'%(action)s'") % {'action': action, 'server_id': server_id}
-    raise webob.exc.HTTPConflict(explanation=msg)
-
-
 def url_join(*parts):
     """Convenience method for joining parts of a URL
 

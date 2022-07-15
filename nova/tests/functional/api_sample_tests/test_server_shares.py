@@ -34,9 +34,7 @@ class ServerSharesBase(test_servers.ServersSampleBase):
                 }
 
     def create_server_ok(self,
-            requested_flavor={
-                'virtiofs': 'required',
-                'mem_backing_file': 'required'}
+            requested_flavor=None
             ):
         flavor = self._create_flavor(extra_spec=requested_flavor)
         server = self._create_server(networks='auto', flavor_id=flavor)
@@ -44,16 +42,7 @@ class ServerSharesBase(test_servers.ServersSampleBase):
         return server['id']
 
     def create_server_not_stopped(self):
-        flavor = self._create_flavor(extra_spec={
-            'virtiofs': 'required',
-            'mem_backing_file': 'required'})
-        server = self._create_server(networks='auto', flavor_id=flavor)
-        return server['id']
-
-    def create_server_extra_spec_not_ok(self):
-        flavor = self._create_flavor(extra_spec={'fake': 'required'})
-        server = self._create_server(networks='auto', flavor_id=flavor)
-        self._stop_server(server)
+        server = self._create_server(networks='auto')
         return server['id']
 
     @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
@@ -74,21 +63,6 @@ class ServerSharesJsonTest(ServerSharesBase):
         """Verify we can create a share mapping.
         """
         self._post_server_shares()
-
-    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
-    def test_server_shares_create_with_alternative_flavor(self, mock_resolver):
-        """Verify we can create a share mapping with the alternative flavor.
-        """
-        uuid = self.create_server_ok(requested_flavor=
-                {'virtiofs': 'required',
-                    'hw:mem_page_size': 'large'}
-                )
-        subs = self._get_create_subs()
-        response = self._do_post('servers/%s/shares' % uuid,
-                                'server-shares-create-req', subs)
-        self._verify_response('server-shares-show-resp',
-                subs, response, 201)
-        return uuid
 
     def test_server_shares_create_fails_if_already_created(self):
         """Verify we cannot create a share mapping already created.
@@ -111,16 +85,42 @@ class ServerSharesJsonTest(ServerSharesBase):
         self.assertEqual(409, response.status_code)
         self.assertIn('while it is in vm_state active', response.text)
 
-    def test_server_shares_create_fails_extra_spec_incorrect(self):
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def test_server_shares_create_fails_incorrect_configuration(
+            self, mock_resolver):
         """Verify we cannot create a share we don't have the
-        appropriate extra specs
+        appropriate configuration.
         """
-        uuid = self.create_server_extra_spec_not_ok()
-        subs = self._get_create_subs()
-        response = self._do_post('servers/%s/shares' % uuid,
-                                'server-shares-create-req', subs)
-        self.assertEqual(409, response.status_code)
-        self.assertIn('missing extra specs', response.text)
+        with mock.patch.dict(self.compute.driver.capabilities,
+                             supports_mem_backing_file=False):
+            self.compute.stop()
+            self.compute.start()
+            uuid = self.create_server_ok()
+            subs = self._get_create_subs()
+            response = self._do_post('servers/%s/shares' % uuid,
+                                    'server-shares-create-req', subs)
+            self.assertEqual(409, response.status_code)
+            self.assertIn(
+                'Feature not supported because either compute or '
+                'instance are not configured correctly.', response.text
+            )
+
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def test_server_shares_create_with_alternative_flavor(
+            self, mock_resolver):
+        """Verify we can create a share with the proper flavor.
+        """
+        with mock.patch.dict(self.compute.driver.capabilities,
+                             supports_mem_backing_file=False):
+            self.compute.stop()
+            self.compute.start()
+            uuid = self.create_server_ok(
+                requested_flavor= {'hw:mem_page_size': 'large'}
+            )
+            subs = self._get_create_subs()
+            response = self._do_post('servers/%s/shares' % uuid,
+                                    'server-shares-create-req', subs)
+            self.assertEqual(201, response.status_code)
 
     @mock.patch('nova.share.manila.API.get',
             side_effect=exception.ShareNotFound(share_id='fake_uuid')
@@ -135,17 +135,17 @@ class ServerSharesJsonTest(ServerSharesBase):
                                 'server-shares-create-req', subs)
         self.assertEqual(404, response.status_code)
         self.assertIn("Share fake_uuid could not be found", response.text)
-        return uuid
 
-    def test_server_shares_create_fails_compute_version(self):
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def test_server_shares_create_fails_compute_version(self, mock_resolver):
         """Verify we can not create a share if the compute if was not updated
         to a supported version.
         """
         uuid = self.create_server_ok()
         subs = self._get_create_subs()
         with mock.patch(
-            'nova.objects.service'
-            '.get_minimum_version_all_cells',
+            'nova.objects.service.Service'
+            '.get_minimum_version',
             return_value=60
         ):
             response = self._do_post('servers/%s/shares' % uuid,
@@ -155,7 +155,16 @@ class ServerSharesJsonTest(ServerSharesBase):
                 "Feature not supported until computes have not been updated",
                 response.text
             )
-        return uuid
+
+    def test_server_shares_create_unknown_instance(self):
+        """Verify creating a share on an unknown instance reports an error.
+        """
+        self.create_server_ok()
+        subs = self._get_create_subs()
+        response = self._do_post('servers/%s/shares' % uuidsentinel.fake_uuid,
+                                'server-shares-create-req', subs)
+        self.assertEqual(404, response.status_code)
+        self.assertIn("could not be found", response.text)
 
     def test_server_shares_index(self):
         """Verify we can list shares.
@@ -167,13 +176,13 @@ class ServerSharesJsonTest(ServerSharesBase):
                 subs, response, 200)
 
     def test_server_shares_index_fails_compute_version(self):
-        """Verify we can not get shares index if the compute if was not updated
+        """Verify we can not get shares index if the compute was not updated
         to a supported version.
         """
         uuid = self.create_server_ok()
         with mock.patch(
-            'nova.objects.service'
-            '.get_minimum_version_all_cells',
+            'nova.objects.service.Service'
+            '.get_minimum_version',
             return_value=60
         ):
             response = self._do_get('servers/%s/shares' % uuid)
@@ -182,16 +191,16 @@ class ServerSharesJsonTest(ServerSharesBase):
                 "Feature not supported until computes have not been updated",
                 response.text
             )
-        return uuid
 
-    def test_server_shares_index_unknown_uuid(self):
-        """Verify we can list shares on an unknown uuid
-           If nothing is found in the share_mapping table then an empty
-           list is returned.
+    def test_server_shares_index_unknown_instance(self):
+        """Verify getting shares on an unknown instance reports an error.
         """
         response = self._do_get('servers/%s/shares' % uuidsentinel.fake_uuid)
-        self.assertEqual(200, response.status_code)
-        self.assertEqual('{"shares": []}', response.text)
+        self.assertEqual(404, response.status_code)
+        self.assertIn(
+            "could not be found",
+            response.text
+        )
 
     def test_server_shares_show(self):
         """Verify we can show a share.
@@ -204,14 +213,14 @@ class ServerSharesJsonTest(ServerSharesBase):
                 subs, response, 200)
 
     def test_server_shares_show_fails_compute_version(self):
-        """Verify we can not show a share if the compute if was not updated
+        """Verify we can not show a share if the compute was not updated
         to a supported version.
         """
         uuid = self.create_server_ok()
         subs = self._get_create_subs()
         with mock.patch(
-            'nova.objects.service'
-            '.get_minimum_version_all_cells',
+            'nova.objects.service.Service'
+            '.get_minimum_version',
             return_value=60
         ):
             response = self._do_get(
@@ -221,7 +230,38 @@ class ServerSharesJsonTest(ServerSharesBase):
                 "Feature not supported until computes have not been updated",
                 response.text
             )
-        return uuid
+
+    @mock.patch('nova.share.manila.API.get',
+            side_effect=exception.ShareNotFound(share_id='fake_uuid')
+            )
+    def test_server_shares_show_fails_share_not_found(self, _):
+        """Verify we can not show a share if the share does not
+        exists.
+        """
+        uuid = self.create_server_ok()
+        subs = self._get_create_subs()
+        response = self._do_get(
+                'servers/%s/shares/%s' % (uuid, subs['shareId']))
+        self.assertEqual(404, response.status_code)
+        self.assertIn(
+            "Share e8debdc0-447a-4376-a10a-4cd9122d7986 could not be found",
+            response.text
+        )
+
+    def test_server_shares_show_unknown_instance(self):
+        """Verify showing a share on an unknown instance reports an error.
+        """
+        self._post_server_shares()
+        subs = self._get_create_subs()
+        response = self._do_get(
+                'servers/%s/shares/%s' % (
+                    uuidsentinel.fake_uuid, subs['shareId'])
+        )
+        self.assertEqual(404, response.status_code)
+        self.assertIn(
+            "could not be found",
+            response.text
+        )
 
     @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
     def test_server_shares_delete(self, mock_resolver):
@@ -233,15 +273,16 @@ class ServerSharesJsonTest(ServerSharesBase):
                 'servers/%s/shares/%s' % (uuid, subs['shareId']))
         self.assertEqual(200, response.status_code)
 
-    def test_server_shares_delete_fails_compute_version(self):
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def test_server_shares_delete_fails_compute_version(self, mock_resolver):
         """Verify we can not delete a share if the compute if was not updated
         to a supported version.
         """
         uuid = self.create_server_ok()
         subs = self._get_create_subs()
         with mock.patch(
-            'nova.objects.service'
-            '.get_minimum_version_all_cells',
+            'nova.objects.service.Service'
+            '.get_minimum_version',
             return_value=60
         ):
             response = self._do_delete(
@@ -251,9 +292,8 @@ class ServerSharesJsonTest(ServerSharesBase):
                 "Feature not supported until computes have not been updated",
                 response.text
             )
-        return uuid
 
-    def test_server_shares_delete_fails_unknown_uuid(self):
+    def test_server_shares_delete_fails_share_not_found(self):
         """Verify we have an error if we want to remove an unknown share.
         """
         uuid = self._post_server_shares()
@@ -271,6 +311,23 @@ class ServerSharesJsonTest(ServerSharesBase):
         response = self._do_delete(
                 'servers/%s/shares/%s' % (uuid, subs['shareId']))
         self.assertEqual(409, response.status_code)
+
+    def test_server_shares_delete_unknown_instance(self):
+        """Verify deleting a share on an unknown instance reports an error.
+        """
+        uuid = self._post_server_shares()
+        subs = self._get_create_subs()
+        response = self._do_post('servers/%s/shares' % uuid,
+                                'server-shares-create-req', subs)
+        response = self._do_delete(
+                'servers/%s/shares/%s' % (
+                    uuidsentinel.fake_uuid, subs['shareId'])
+        )
+        self.assertEqual(404, response.status_code)
+        self.assertIn(
+            "could not be found",
+            response.text
+        )
 
 
 class ServerSharesJsonAdminTest(ServerSharesBase):

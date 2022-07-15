@@ -76,9 +76,13 @@ class ServerSharesTest(BaseTestCase):
                     projects=[]),
                 vm_state=vm_states.STOPPED)
 
+    @mock.patch(
+        'nova.virt.hardware.check_shares_supported', return_value=None
+    )
     @mock.patch('nova.db.main.api.share_mapping_get_by_instance_uuid')
     @mock.patch('nova.api.openstack.common.get_instance')
-    def test_index(self, mock_get_instance, mock_db_get_shares,):
+    def test_index(
+            self, mock_get_instance, mock_db_get_shares, mock_shares_support):
         NOW = timeutils.utcnow().replace(microsecond=0)
         instance = self.fake_get_instance()
         mock_get_instance.return_value = instance
@@ -135,19 +139,29 @@ class ServerSharesTest(BaseTestCase):
         self.assertEqual(output, fake_shares)
 
     @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    @mock.patch(
+        'nova.virt.hardware.check_shares_supported', return_value=None
+    )
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.db.main.api.share_mapping_update')
     @mock.patch('nova.api.openstack.common.get_instance')
-    def test_create(self,
-            mock_get_instance,
-            mock_db_update_share,
-            mock_resolver):
-        NOW = timeutils.utcnow().replace(microsecond=0)
+    def test_create(
+        self,
+        mock_get_instance,
+        mock_db_update_share,
+        mock_notifications,
+        mock_shares_support,
+        mock_resolver
+    ):
         instance = self.fake_get_instance()
 
         mock_get_instance.return_value = instance
 
         fake_db_share = {
-            'created_at': NOW,
+            'created_at': None,
             'updated_at': None,
             'deleted_at': None,
             'deleted': False,
@@ -180,6 +194,9 @@ class ServerSharesTest(BaseTestCase):
         )
 
     @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    @mock.patch(
+        'nova.virt.hardware.check_shares_supported', return_value=None
+    )
     @mock.patch('nova.db.main.api.'
             'share_mapping_delete_by_instance_uuid_and_share_id')
     @mock.patch('nova.db.main.api.'
@@ -189,6 +206,7 @@ class ServerSharesTest(BaseTestCase):
             mock_get_instance,
             mock_db_get_shares,
             mock_db_delete_share,
+            mock_shares_support,
             mock_resolver):
         NOW = timeutils.utcnow().replace(microsecond=0)
         instance = self.fake_get_instance()

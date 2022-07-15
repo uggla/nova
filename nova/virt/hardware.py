@@ -23,12 +23,16 @@ from oslo_log import log as logging
 from oslo_utils import strutils
 from oslo_utils import units
 
+from nova import compute
 import nova.conf
 from nova import exception
 from nova.i18n import _
 from nova import objects
+from nova.objects import compute_node
 from nova.objects import fields
+from nova.objects import service
 from nova.pci import stats
+from nova.scheduler.client import report
 
 
 CONF = nova.conf.CONF
@@ -2566,3 +2570,30 @@ def check_hw_rescue_props(image_meta):
     """
     hw_rescue_props = ['hw_rescue_device', 'hw_rescue_bus']
     return any(key in image_meta.properties for key in hw_rescue_props)
+
+
+def check_shares_supported(context, instance):
+    """Check that the compute version support shares and required traits and
+    instance extra specs are configured.
+    """
+    min_version = service.Service().get_minimum_version(
+        context, 'nova-compute')
+    if min_version < compute.api.SUPPORT_SHARES:
+        raise exception.ForbiddenSharesNotSupported()
+
+    host = compute_node.ComputeNode().get_first_node_by_host_for_old_compat(
+        context, instance.host)
+    client = report.SchedulerReportClient()
+    trait_info = client.get_provider_traits(context, host.uuid)
+
+    if not (
+        (
+            'COMPUTE_STORAGE_VIRTIO_FS' in trait_info.traits and
+            'COMPUTE_MEM_BACKING_FILE' in trait_info.traits
+        ) or
+        (
+            'COMPUTE_STORAGE_VIRTIO_FS' in trait_info.traits and
+            'hw:mem_page_size' in instance.flavor.extra_specs
+        )
+    ):
+        raise exception.ForbiddenSharesNotConfiguredCorrectly()

@@ -25,10 +25,10 @@ from nova import context as nova_context
 from nova import exception
 from nova import objects
 from nova.objects import fields
-from nova.objects.share_mapping import ShareMapping
-from nova.objects.share_mapping import ShareMappingList
+from nova.objects import share_mapping as sm
 from nova.policies import server_shares as ss_policies
 from nova.share import manila
+from nova.virt import hardware as hw
 from oslo_utils import uuidutils
 
 
@@ -48,12 +48,16 @@ class ServerSharesController(wsgi.Controller):
         self.compute_api = compute.API()
         self.manila = manila.API()
 
-    def _get_instance_host_ip(self, context, server_id):
+    def _get_instance_from_server_uuid(self, context, server_id):
         instance = common.get_instance(self.compute_api, context, server_id)
+        return instance
+
+    def _get_instance_host_ip(self, context, server_id):
+        instance = self._get_instance_from_server_uuid(context, server_id)
         return socket.gethostbyname(instance.host)
 
     def _check_instance_in_valid_state(self, context, server_id, action):
-        instance = common.get_instance(self.compute_api, context, server_id)
+        instance = self._get_instance_from_server_uuid(context, server_id)
         if instance.vm_state not in vm_states.STOPPED:
             exc = exception.InstanceInvalidState(attr='vm_state',
                                                  instance_uuid=instance.uuid,
@@ -63,30 +67,9 @@ class ServerSharesController(wsgi.Controller):
                                                                   server_id)
         return instance
 
-    def _check_instance_extra_specs(self, context, server_id, action):
-        instance = common.get_instance(self.compute_api, context, server_id)
-        if not (
-            (
-                'virtiofs' in instance.flavor.extra_specs and
-                'mem_backing_file' in instance.flavor.extra_specs
-            ) or
-            (
-                'virtiofs' in instance.flavor.extra_specs and
-                'hw:mem_page_size' in instance.flavor.extra_specs
-            )
-        ):
-            exc = exception.InstanceRequireExtraSpec(
-                    attr='extra_spec',
-                    instance_uuid=instance.uuid,
-                    state=instance.flavor.extra_specs,
-                    method=action)
-            common.raise_http_conflict_for_instance_missing_extra_spec(
-                    exc, action, server_id)
-        return instance
-
     @wsgi.Controller.api_version("2.92")
     @wsgi.response(200)
-    @wsgi.expected_errors(403)
+    @wsgi.expected_errors((400, 401, 403, 404, 409))
     def index(self, req, server_id):
         context = req.environ["nova.context"]
         # Get instance mapping to query the required cell database
@@ -94,29 +77,36 @@ class ServerSharesController(wsgi.Controller):
         context.can(ss_policies.POLICY_ROOT % 'index',
                     target={'project_id': im.project_id})
 
-        try:
-            compute.check_shares_supported()
+        with nova_context.target_cell(context, im.cell_mapping) as cctxt:
+            try:
+                instance = self._get_instance_from_server_uuid(
+                    cctxt, server_id
+                )
+                hw.check_shares_supported(cctxt, instance)
 
-            with nova_context.target_cell(context, im.cell_mapping) as cctxt:
-                db_shares = ShareMappingList.get_by_instance_uuid(
-                    cctxt, server_id)
+                db_shares = sm.ShareMappingList.get_by_instance_uuid(
+                        cctxt, server_id
+                )
 
-        except (exception.ForbiddenSharesNotSupported) as e:
-            raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotSupported) as e:
+                raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                raise webob.exc.HTTPConflict(explanation=e.format_message())
 
         return self._view_builder._list_view(db_shares)
 
     @wsgi.Controller.api_version("2.92")
     @wsgi.response(201)
-    @wsgi.expected_errors((400, 403, 404, 409))
+    @wsgi.expected_errors((400, 401, 403, 404, 409))
     @validation.schema(schema.create, min_version='2.92')
     def create(self, req, server_id, body):
-        def share_mapping_exists(context, server_id, share_id):
+        def sm_exists(context, server_id, share_id):
             try:
-                db_share = ShareMapping.get_by_instance_uuid_and_share_id(
+                db_share = sm.ShareMapping.get_by_instance_uuid_and_share_id(
                     context,
                     server_id,
-                    share_id)
+                    share_id
+                )
                 if db_share:
                     return True
             except (exception.ShareNotFound):
@@ -128,8 +118,6 @@ class ServerSharesController(wsgi.Controller):
         context.can(ss_policies.POLICY_ROOT % 'create',
                     target={'project_id': im.project_id})
 
-        compute.check_shares_supported()
-
         share_dict = body['share']
         share_id = share_dict.get('shareId')
         share_tag = share_dict.get('tag')
@@ -139,22 +127,17 @@ class ServerSharesController(wsgi.Controller):
                     server_id,
                     "create share")
 
-            # TODO(uggla) Review and uncomment this check
-            # self._check_instance_extra_specs(
-            #         cctxt,
-            #         server_id,
-            #         "create share")
             try:
-                # compute.check_shares_supported()
+                hw.check_shares_supported(cctxt, instance)
                 # Check if this share mapping already exists in the database.
                 # Prevent user error, requesting an already associated share.
-                if share_mapping_exists(cctxt, server_id, share_id):
+                if sm_exists(cctxt, server_id, share_id):
                     raise exception.ShareMappingAlreadyExists(
                             share_id=share_id)
 
                 manila_share_data = self.manila.get(cctxt, share_id)
 
-                db_share = ShareMapping(cctxt)
+                db_share = sm.ShareMapping(cctxt)
                 db_share.uuid = uuidutils.generate_uuid()
                 db_share.instance_uuid = server_id
                 db_share.share_id = manila_share_data['id']
@@ -207,12 +190,14 @@ class ServerSharesController(wsgi.Controller):
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
             except (exception.ForbiddenSharesNotSupported) as e:
                 raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                raise webob.exc.HTTPConflict(explanation=e.format_message())
 
         return view
 
     @wsgi.Controller.api_version("2.92")
     @wsgi.response(200)
-    @wsgi.expected_errors((400, 403, 404))
+    @wsgi.expected_errors((400, 401, 403, 404, 409))
     def show(self, req, server_id, id):
         context = req.environ["nova.context"]
         # Get instance mapping to query the required cell database
@@ -220,27 +205,32 @@ class ServerSharesController(wsgi.Controller):
         context.can(ss_policies.POLICY_ROOT % 'show',
                     target={'project_id': im.project_id})
 
-        try:
-            compute.check_shares_supported()
-
-            with nova_context.target_cell(context, im.cell_mapping) as cctxt:
-                share = ShareMapping.get_by_instance_uuid_and_share_id(
+        with nova_context.target_cell(context, im.cell_mapping) as cctxt:
+            try:
+                instance = self._get_instance_from_server_uuid(
+                    cctxt, server_id
+                )
+                hw.check_shares_supported(cctxt, instance)
+                share = sm.ShareMapping.get_by_instance_uuid_and_share_id(
                     cctxt,
                     server_id,
-                    id)
+                    id
+                )
 
-            view = self._view_builder._show_view(cctxt, share)
+                view = self._view_builder._show_view(cctxt, share)
 
-        except (exception.ShareNotFound) as e:
-            raise webob.exc.HTTPNotFound(explanation=e.format_message())
-        except (exception.ForbiddenSharesNotSupported) as e:
-            raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ShareNotFound) as e:
+                raise webob.exc.HTTPNotFound(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotSupported) as e:
+                raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                raise webob.exc.HTTPConflict(explanation=e.format_message())
 
         return view
 
     @wsgi.Controller.api_version("2.92")
     @wsgi.response(200)
-    @wsgi.expected_errors((400, 403, 404, 409))
+    @wsgi.expected_errors((400, 401, 403, 404, 409))
     def delete(self, req, server_id, id):
         context = req.environ["nova.context"]
         # Get instance mapping to query the required cell database
@@ -249,22 +239,23 @@ class ServerSharesController(wsgi.Controller):
                     target={'project_id': im.project_id})
 
         with nova_context.target_cell(context, im.cell_mapping) as cctxt:
-            self._check_instance_in_valid_state(
+            instance = self._check_instance_in_valid_state(
                     cctxt,
                     server_id,
                     "delete share")
             try:
-                compute.check_shares_supported()
-
-                share = ShareMapping.get_by_instance_uuid_and_share_id(
+                hw.check_shares_supported(cctxt, instance)
+                share = (
+                    sm.ShareMapping.get_by_instance_uuid_and_share_id(
                     cctxt,
                     server_id,
                     id)
+                )
 
                 # Check if this share is used by other VMs
                 # If yes, then we should not deny this access
-                if len(ShareMappingList.get_by_share_id(cctxt, share.share_id)
-                        ) < 2:
+                if len(sm.ShareMappingList.get_by_share_id(
+                        cctxt, share.share_id)) < 2:
                     self.manila.deny(
                             cctxt,
                             share.share_id,
@@ -280,3 +271,5 @@ class ServerSharesController(wsgi.Controller):
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
             except (exception.ForbiddenSharesNotSupported) as e:
                 raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                raise webob.exc.HTTPConflict(explanation=e.format_message())
