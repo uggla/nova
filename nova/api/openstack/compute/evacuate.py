@@ -130,6 +130,10 @@ class EvacuateController(wsgi.Controller):
             exception.ExtendedResourceRequestOldCompute,
         ) as e:
             raise exc.HTTPBadRequest(explanation=e.format_message())
+        except (
+            exception.ForbiddenSharesNotSupported,
+            exception.ForbiddenWithShare) as e:
+            raise exc.HTTPConflict(explanation=e.format_message())
 
         if (not api_version_request.is_supported(req, min_version='2.14') and
                 CONF.api.enable_instance_password):

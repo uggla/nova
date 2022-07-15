@@ -122,6 +122,8 @@ MIN_COMPUTE_VDPA_ATTACH_DETACH = 62
 MIN_COMPUTE_VDPA_HOTPLUG_LIVE_MIGRATION = 63
 
 
+SUPPORT_SHARES = 62
+
 # FIXME(danms): Keep a global cache of the cells we find the
 # first time we look. This needs to be refreshed on a timer or
 # trigger.
@@ -373,6 +375,31 @@ def block_port_accelerators():
             return func(self, context, instance, *args, **kwargs)
         return wrapper
     return inner
+
+
+def block_shares_not_supported():
+    """Block actions not allowed if the instance has a share.
+    """
+    def inner(func):
+        @functools.wraps(func)
+        def wrapper(self, context, instance, *args, **kwargs):
+            # Check if instance has a share mapped
+            if instance_has_share(context, instance):
+                raise exception.ForbiddenWithShare()
+            return func(self, context, instance, *args, **kwargs)
+        return wrapper
+    return inner
+
+
+def instance_has_share(context, instance):
+    im = objects.InstanceMapping.get_by_instance_uuid(
+        context, instance.uuid)
+    with nova_context.target_cell(context, im.cell_mapping) as cctxt:
+        db_shares = (
+            objects.share_mapping.ShareMappingList.get_by_instance_uuid(
+                cctxt, instance.uuid)
+        )
+        return db_shares
 
 
 def block_extended_resource_request(function):
@@ -4149,6 +4176,7 @@ class API:
 
         return node
 
+    @block_shares_not_supported()
     # TODO(stephenfin): This logic would be so much easier to grok if we
     # finally split resize and cold migration into separate code paths
     @block_extended_resource_request
@@ -4391,6 +4419,9 @@ class API:
             allow_same_host = CONF.allow_resize_to_same_host
         return allow_same_host
 
+    @block_shares_not_supported()
+    # FIXME(sean-k-mooney): Shelve works but unshelve does not due to bug
+    # #1851545, so block it for now
     @block_port_accelerators()
     @reject_vtpm_instances(instance_actions.SHELVE)
     @block_accelerators(until_service=54)
@@ -5463,6 +5494,7 @@ class API:
 
         return _metadata
 
+    @block_shares_not_supported()
     @block_extended_resource_request
     @block_port_accelerators()
     @reject_vdpa_instances(
@@ -5600,6 +5632,7 @@ class API:
         self.compute_rpcapi.live_migration_abort(context,
                 instance, migration.id)
 
+    @block_shares_not_supported()
     @block_extended_resource_request
     @block_port_accelerators()
     @reject_vtpm_instances(instance_actions.EVACUATE)
