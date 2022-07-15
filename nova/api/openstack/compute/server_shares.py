@@ -81,8 +81,13 @@ class ServerSharesController(wsgi.Controller):
 
         with nova_context.target_cell(context, im.cell_mapping) as cctxt:
             try:
-                db_shares = sm.ShareMappingList.get_by_instance_uuid(
+                instance = self._get_instance_from_server_uuid(
                     cctxt, server_id
+                )
+                hw.check_shares_supported(cctxt, instance)
+
+                db_shares = sm.ShareMappingList.get_by_instance_uuid(
+                        cctxt, server_id
                 )
 
             except (exception.ForbiddenSharesNotSupported) as e:
@@ -121,13 +126,14 @@ class ServerSharesController(wsgi.Controller):
         share_id = share_dict.get('shareId')
         share_tag = share_dict.get('tag')
         with nova_context.target_cell(context, im.cell_mapping) as cctxt:
-            self._check_instance_in_valid_state(
+            instance = self._check_instance_in_valid_state(
                 cctxt,
                 server_id,
                 "create share"
             )
 
             try:
+                hw.check_shares_supported(cctxt, instance)
                 # Check if this share mapping already exists in the database.
                 # Prevent user error, requesting an already associated share.
                 if sm_exists(cctxt, server_id, share_id):
@@ -173,6 +179,10 @@ class ServerSharesController(wsgi.Controller):
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
             except (exception.ShareMappingAlreadyExists) as e:
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotSupported) as e:
+                raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                raise webob.exc.HTTPConflict(explanation=e.format_message())
 
         return view
 
@@ -190,6 +200,10 @@ class ServerSharesController(wsgi.Controller):
 
         with nova_context.target_cell(context, im.cell_mapping) as cctxt:
             try:
+                instance = self._get_instance_from_server_uuid(
+                    cctxt, server_id
+                )
+                hw.check_shares_supported(cctxt, instance)
                 share = sm.ShareMapping.get_by_instance_uuid_and_share_id(
                     cctxt,
                     server_id,
@@ -200,6 +214,10 @@ class ServerSharesController(wsgi.Controller):
 
             except (exception.ShareNotFound) as e:
                 raise webob.exc.HTTPNotFound(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotSupported) as e:
+                raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                raise webob.exc.HTTPConflict(explanation=e.format_message())
 
         return view
 
@@ -216,12 +234,13 @@ class ServerSharesController(wsgi.Controller):
         )
 
         with nova_context.target_cell(context, im.cell_mapping) as cctxt:
-            self._check_instance_in_valid_state(
+            instance = self._check_instance_in_valid_state(
                 cctxt,
                 server_id,
                 "delete share"
             )
             try:
+                hw.check_shares_supported(cctxt, instance)
                 share = (
                     sm.ShareMapping.get_by_instance_uuid_and_share_id(
                     cctxt,
@@ -246,3 +265,7 @@ class ServerSharesController(wsgi.Controller):
                 raise webob.exc.HTTPNotFound(explanation=e.format_message())
             except (exception.UnsupportedManilaAPIVersion) as e:
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotSupported) as e:
+                raise webob.exc.HTTPForbidden(explanation=e.format_message())
+            except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                raise webob.exc.HTTPConflict(explanation=e.format_message())
