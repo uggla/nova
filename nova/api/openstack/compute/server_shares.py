@@ -255,6 +255,15 @@ class ServerSharesController(wsgi.Controller):
                     id)
                 )
 
+                utils.notify_about_share_attach_detach(
+                    cctxt,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.START,
+                    share_id=share_mapping.share_id
+                )
+
                 # Check if this share is used by other VMs on the same compute
                 # If yes, then we should not deny this access
                 nb_instances_on_compute = 0
@@ -270,6 +279,15 @@ class ServerSharesController(wsgi.Controller):
                         cctxt, instance, share_mapping)
 
                 share_mapping.detach()
+
+                utils.notify_about_share_attach_detach(
+                    cctxt,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.END,
+                    share_id=share_mapping.share_id
+                )
 
             except (exception.ShareNotFound) as e:
                 raise webob.exc.HTTPNotFound(explanation=e.format_message())
