@@ -389,6 +389,7 @@ class TestInstanceNotificationSample(
             self._test_lock_unlock_instance,
             self._test_lock_unlock_instance_with_reason,
             self._test_share_attach,
+            self._test_share_detach,
         ]
 
         for action in actions:
@@ -1735,6 +1736,43 @@ class TestInstanceNotificationSample(
             actual=self.notifier.versioned_notifications[1])
 
         # Start server
+        self.api.post_server_action(server['id'], {'os-start': {}})
+        self._wait_for_state_change(server, expected_status='ACTIVE')
+
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def _test_share_detach(self, server, mock_dns):
+        self.api.post_server_action(server['id'], {'os-stop': {}})
+        self._wait_for_state_change(server, expected_status='SHUTOFF')
+        self.notifier.reset()
+
+        # Return a constant share uuid
+        with mock.patch(
+                'oslo_utils.uuidutils.generate_uuid',
+                return_value='f7c1726d-7622-42b3-8b2c-4473239d60d1'):
+            # Detach share
+            self._detach_share(
+                server, 'e8debdc0-447a-4376-a10a-4cd9122d7986')
+
+        self.assertEqual(2, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        self._verify_notification(
+            'instance-share_detach-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown'},
+            actual=self.notifier.versioned_notifications[0])
+        self._verify_notification(
+            'instance-share_detach-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown'},
+            actual=self.notifier.versioned_notifications[1])
+
+        # Restart server
         self.api.post_server_action(server['id'], {'os-start': {}})
         self._wait_for_state_change(server, expected_status='ACTIVE')
 
