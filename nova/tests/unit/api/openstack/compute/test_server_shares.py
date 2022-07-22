@@ -220,17 +220,24 @@ class ServerSharesTest(BaseTestCase):
     @mock.patch(
         'nova.virt.hardware.check_shares_supported', return_value=None
     )
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.db.main.api.'
             'share_mapping_delete_by_instance_uuid_and_share_id')
     @mock.patch('nova.db.main.api.'
             'share_mapping_get_by_instance_uuid_and_share_id')
     @mock.patch('nova.api.openstack.common.get_instance')
-    def test_delete(self,
-            mock_get_instance,
-            mock_db_get_shares,
-            mock_db_delete_share,
-            mock_shares_support,
-            mock_resolver):
+    def test_delete(
+        self,
+        mock_get_instance,
+        mock_db_get_shares,
+        mock_db_delete_share,
+        mock_notifications,
+        mock_shares_support,
+        mock_resolver
+    ):
         instance = self.fake_get_instance()
 
         mock_get_instance.return_value = instance

@@ -279,7 +279,25 @@ class ServerSharesController(wsgi.Controller):
                         self._get_instance_host_ip(cctxt, server_id)
                     )
 
+                utils.notify_about_share_attach_detach(
+                    cctxt,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.START,
+                    share_id=share.share_id
+                )
+
                 share.detach()
+
+                utils.notify_about_share_attach_detach(
+                    cctxt,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.END,
+                    share_id=share.share_id
+                )
 
             except (exception.ShareNotFound) as e:
                 raise webob.exc.HTTPNotFound(explanation=e.format_message())
