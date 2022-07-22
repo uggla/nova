@@ -2658,12 +2658,17 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_allow.assert_called_once_with(
             mock.ANY, share_mapping.share_id, 'ip', compute_ip, 'rw')
 
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
     @mock.patch('nova.share.manila.API.deny')
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share(
-        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete
+        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
+        mock_notifications
     ):
         """Ensure we can deny the instance share.
         """
@@ -2689,13 +2694,36 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_deny.assert_called_once_with(
             mock.ANY, share_mapping.share_id, 'ip', compute_ip)
         mock_db_delete.assert_called_once()
+        mock_notifications.assert_has_calls([
+            mock.call(
+                mock.ANY,
+                instance,
+                "fake-host",
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=fields.NotificationPhase.START,
+                share_id=share_mapping.share_id
+            ),
+            mock.call(
+                mock.ANY,
+                instance,
+                "fake-host",
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=fields.NotificationPhase.END,
+                share_id=share_mapping.share_id
+            ),
+        ])
 
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
     @mock.patch('nova.share.manila.API.deny')
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_in_use(
-        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete
+        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
+        mock_notifications
     ):
         """Ensure we cannot deny a share used by an instance.
         """
@@ -2714,13 +2742,36 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         self.compute.deny_share(self.context, instance, share_mapping)
         mock_deny.assert_not_called()
         mock_db_delete.assert_called_once()
+        mock_notifications.assert_has_calls([
+            mock.call(
+                mock.ANY,
+                instance,
+                "fake-host",
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=fields.NotificationPhase.START,
+                share_id=share_mapping.share_id
+            ),
+            mock.call(
+                mock.ANY,
+                instance,
+                "fake-host",
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=fields.NotificationPhase.END,
+                share_id=share_mapping.share_id
+            ),
+        ])
 
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
     @mock.patch('nova.share.manila.API.deny')
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_in_error(
-        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete
+        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
+        mock_notifications
     ):
         """Ensure we can deny a share in error on the instance detaching the
         share.
@@ -2748,13 +2799,36 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_deny.assert_called_once_with(
             mock.ANY, share_mapping.share_id, 'ip', compute_ip)
         mock_db_delete.assert_called_once()
+        mock_notifications.assert_has_calls([
+            mock.call(
+                mock.ANY,
+                instance,
+                "fake-host",
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=fields.NotificationPhase.START,
+                share_id=share_mapping.share_id
+            ),
+            mock.call(
+                mock.ANY,
+                instance,
+                "fake-host",
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=fields.NotificationPhase.END,
+                share_id=share_mapping.share_id
+            ),
+        ])
 
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
     @mock.patch('nova.share.manila.API.deny')
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_access_not_found_in_manila(
-        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete
+        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
+            mock_notifications
     ):
         """Ensure we can deny a share even if access is not found in manila.
         """
@@ -2779,12 +2853,17 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             mock.ANY, share_mapping.share_id, 'ip', compute_ip)
         mock_db_delete.assert_called_once()
 
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
     @mock.patch('nova.share.manila.API.deny')
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_not_found_in_manila(
-        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete
+        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
+            mock_notifications
     ):
         """Ensure we can deny a share even if the share is not found in manila.
         """
@@ -2809,6 +2888,10 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             mock.ANY, share_mapping.share_id, 'ip', compute_ip)
         mock_db_delete.assert_called_once()
 
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
     @mock.patch('nova.share.manila.API.deny')
@@ -2816,7 +2899,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_fails_access_removal_error(
         self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
-            mock_db_save
+            mock_db_save, mock_notifications
     ):
         """Ensure we have an exception if the access cannot be removed
         by manila.
@@ -2847,6 +2930,10 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_db_delete.assert_not_called()
         self.assertEqual(share_mapping.status, 'error')
 
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
     @mock.patch('nova.share.manila.API.deny')
@@ -2854,7 +2941,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_fails_keystone_unauthorized(
         self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
-            mock_db_save
+            mock_db_save, mock_notifications
     ):
         """Ensure we have an exception if the access cannot be removed
         by manila.
@@ -2884,6 +2971,10 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_db_delete.assert_not_called()
         self.assertEqual(share_mapping.status, 'error')
 
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
     @mock.patch('nova.share.manila.API.deny')
@@ -2891,7 +2982,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_fails_protocol_not_supported(
         self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
-            mock_db_save
+            mock_db_save, mock_notifications
     ):
         """Ensure we have an exception if the access cannot be removed
         by manila.
@@ -2921,12 +3012,17 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_db_delete.assert_not_called()
         self.assertEqual(share_mapping.status, 'error')
 
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
     @mock.patch('nova.share.manila.API.deny')
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_in_use_by_another_instance(
-        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete
+        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
+            mock_notifications
     ):
         """Ensure we do not deny a share used by another instance.
         """
@@ -2947,13 +3043,36 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         self.compute.deny_share(self.context, instance, share_mapping1)
         mock_deny.assert_not_called()
         mock_db_delete.assert_called_once()
+        mock_notifications.assert_has_calls([
+            mock.call(
+                mock.ANY,
+                instance,
+                "fake-host",
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=fields.NotificationPhase.START,
+                share_id=share_mapping1.share_id
+            ),
+            mock.call(
+                mock.ANY,
+                instance,
+                "fake-host",
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=fields.NotificationPhase.END,
+                share_id=share_mapping1.share_id
+            ),
+        ])
 
+    @mock.patch(
+        'nova.compute.utils.notify_about_share_attach_detach',
+        return_value=None
+    )
     @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
     @mock.patch('nova.share.manila.API.deny')
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_in_error_on_another_instance(
-        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete
+        self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
+        mock_notifications
     ):
         """Ensure we cannot deny a share in error state on another instance.
         If the other instance is hard rebooted, it might need the share.
@@ -2976,6 +3095,24 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         self.compute.deny_share(self.context, instance, share_mapping1)
         mock_deny.assert_not_called()
         mock_db_delete.assert_called_once()
+        mock_notifications.assert_has_calls([
+            mock.call(
+                mock.ANY,
+                instance,
+                "fake-host",
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=fields.NotificationPhase.START,
+                share_id=share_mapping1.share_id
+            ),
+            mock.call(
+                mock.ANY,
+                instance,
+                "fake-host",
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=fields.NotificationPhase.END,
+                share_id=share_mapping1.share_id
+            ),
+        ])
 
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     @mock.patch('nova.virt.fake.FakeDriver.mount_share')
