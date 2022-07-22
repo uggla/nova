@@ -249,9 +249,27 @@ class ServerSharesController(wsgi.Controller):
                     )
                 )
 
+                utils.notify_about_share_attach_detach(
+                    cctxt,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.START,
+                    share_id=share_mapping.share_id
+                )
+
                 self.compute_api.deny_share(cctxt, instance, share_mapping)
 
                 share_mapping.delete()
+
+                utils.notify_about_share_attach_detach(
+                    cctxt,
+                    instance,
+                    instance.host,
+                    action=fields.NotificationAction.SHARE_DETACH,
+                    phase=fields.NotificationPhase.END,
+                    share_id=share_mapping.share_id
+                )
 
             except (exception.ShareNotFound) as e:
                 raise webob.exc.HTTPNotFound(explanation=e.format_message())
