@@ -27,6 +27,7 @@ class TestInstanceNotificationSampleWithMultipleCompute(
     def setUp(self):
         self.flags(compute_driver='fake.FakeLiveMigrateDriver')
         self.flags(bdms_in_notifications='True', group='notifications')
+        self.flags(include_share_mapping='True', group='notifications')
         super(TestInstanceNotificationSampleWithMultipleCompute, self).setUp()
         self.neutron = fixtures.NeutronFixture(self)
         self.useFixture(self.neutron)
@@ -336,6 +337,7 @@ class TestInstanceNotificationSample(
 
     def setUp(self):
         self.flags(bdms_in_notifications='True', group='notifications')
+        self.flags(include_share_mapping='True', group='notifications')
         super(TestInstanceNotificationSample, self).setUp()
         self.neutron = fixtures.NeutronFixture(self)
         self.useFixture(self.neutron)
@@ -388,8 +390,7 @@ class TestInstanceNotificationSample(
             self._test_interface_attach_error,
             self._test_lock_unlock_instance,
             self._test_lock_unlock_instance_with_reason,
-            self._test_share_attach,
-            self._test_share_detach,
+            self._test_share_attach_detach,
         ]
 
         for action in actions:
@@ -1702,7 +1703,21 @@ class TestInstanceNotificationSample(
                 'uuid': server['id']},
             actual=self.notifier.versioned_notifications[1])
 
-    def _test_share_attach(self, server):
+    def _test_share_attach_detach(self, server):
+
+        expected_shares = [
+            {'nova_object.name': 'SharePayload',
+             'nova_object.namespace': 'nova',
+             'nova_object.version': '1.0',
+             'nova_object.data': {
+                 'share_mapping_uuid': 'f7c1726d-7622-42b3-8b2c-4473239d60d1',
+                 'share_id': 'e8debdc0-447a-4376-a10a-4cd9122d7986',
+                 'status': 'inactive',
+                 'tag': 'e8debdc0-447a-4376-a10a-4cd9122d7986',
+                 'export_location': '10.0.0.50:/mnt/foo'}
+             }
+        ]
+
         self.api.post_server_action(server['id'], {'os-stop': {}})
         self._wait_for_state_change(server, expected_status='SHUTOFF')
         self.notifier.reset()
@@ -1732,17 +1747,65 @@ class TestInstanceNotificationSample(
                 'reservation_id': server['reservation_id'],
                 'uuid': server['id'],
                 'state': 'stopped',
-                'power_state': 'shutdown'},
+                'power_state': 'shutdown',
+                'shares': expected_shares
+            },
             actual=self.notifier.versioned_notifications[1])
 
         # Start server
+        self.notifier.reset()
         self.api.post_server_action(server['id'], {'os-start': {}})
         self._wait_for_state_change(server, expected_status='ACTIVE')
+        self.assertEqual(2, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        self._verify_notification(
+            'instance-power_on_share-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown',
+            },
+            actual=self.notifier.versioned_notifications[0])
+        expected_shares[0]['nova_object.data']['status'] = 'active'
+        self._verify_notification(
+            'instance-power_on_share-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'active',
+                'power_state': 'running',
+            },
+            actual=self.notifier.versioned_notifications[1])
 
-    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
-    def _test_share_detach(self, server, mock_dns):
+        # Shutdown server
+        self.notifier.reset()
         self.api.post_server_action(server['id'], {'os-stop': {}})
         self._wait_for_state_change(server, expected_status='SHUTOFF')
+        self.assertEqual(2, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        self._verify_notification(
+            'instance-power_off-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'active',
+                'power_state': 'running',
+                'shares': expected_shares
+            },
+            actual=self.notifier.versioned_notifications[0])
+        expected_shares[0]['nova_object.data']['status'] = 'inactive'
+        self._verify_notification(
+            'instance-power_off-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown',
+                'shares': expected_shares
+            },
+            actual=self.notifier.versioned_notifications[1])
+
         self.notifier.reset()
 
         # Return a constant share uuid
@@ -1761,7 +1824,9 @@ class TestInstanceNotificationSample(
                 'reservation_id': server['reservation_id'],
                 'uuid': server['id'],
                 'state': 'stopped',
-                'power_state': 'shutdown'},
+                'power_state': 'shutdown',
+                'shares': expected_shares
+            },
             actual=self.notifier.versioned_notifications[0])
         self._verify_notification(
             'instance-share_detach-end',
@@ -1773,8 +1838,29 @@ class TestInstanceNotificationSample(
             actual=self.notifier.versioned_notifications[1])
 
         # Restart server
+        self.notifier.reset()
         self.api.post_server_action(server['id'], {'os-start': {}})
         self._wait_for_state_change(server, expected_status='ACTIVE')
+        self.assertEqual(2, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        self._verify_notification(
+            'instance-power_on-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown',
+            },
+            actual=self.notifier.versioned_notifications[0])
+        self._verify_notification(
+            'instance-power_on-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'active',
+                'power_state': 'running',
+            },
+            actual=self.notifier.versioned_notifications[1])
 
     def _test_rescue_unrescue_server(self, server):
         # Both "rescue" and "unrescue" notification asserts are made here
