@@ -70,7 +70,8 @@ class InstancePayload(base.NotificationPayloadBase):
     # Version 1.7: Added action_initiator_user and action_initiator_project to
     #              InstancePayload
     # Version 1.8: Added locked_reason field
-    VERSION = '1.8'
+    # Version 1.9: Add shares related data
+    VERSION = '1.9'
     fields = {
         'uuid': fields.UUIDField(),
         'user_id': fields.StringField(nullable=True),
@@ -116,6 +117,8 @@ class InstancePayload(base.NotificationPayloadBase):
         'action_initiator_user': fields.StringField(nullable=True),
         'action_initiator_project': fields.StringField(nullable=True),
         'locked_reason': fields.StringField(nullable=True),
+        'shares': fields.ListOfObjectsField('SharePayload',
+                                                   nullable=True),
     }
 
     def __init__(self, context, instance, bdms=None):
@@ -127,6 +130,7 @@ class InstancePayload(base.NotificationPayloadBase):
             self.block_devices = BlockDevicePayload.from_bdms(bdms)
         else:
             self.block_devices = BlockDevicePayload.from_instance(instance)
+        self.shares = SharePayload.from_instance(instance)
         # NOTE(Kevin_Zheng): Don't include request_id for periodic tasks,
         # RequestContext for periodic tasks does not include project_id
         # and user_id. Consider modify this once periodic tasks got a
@@ -152,7 +156,8 @@ class InstanceActionPayload(InstancePayload):
     # Version 1.7: Added action_initiator_user and action_initiator_project to
     #              InstancePayload
     # Version 1.8: Added locked_reason field to InstancePayload
-    VERSION = '1.8'
+    # Version 1.9: Add shares related data
+    VERSION = '1.9'
     fields = {
         'fault': fields.ObjectField('ExceptionPayload', nullable=True),
         'request_id': fields.StringField(nullable=True),
@@ -490,6 +495,58 @@ class BlockDevicePayload(base.NotificationPayloadBase):
         for bdm in bdms:
             if bdm.volume_id is not None:
                 payloads.append(cls(bdm))
+        return payloads
+
+
+@nova_base.NovaObjectRegistry.register_notification
+class SharePayload(base.NotificationPayloadBase):
+    # Version 1.0: Initial version
+    VERSION = '1.0'
+
+    SCHEMA = {
+        'instance_uuid': ('share', 'instance_uuid'),
+        'attachementID': ('share', 'uuid'),
+        'share_id': ('share', 'share_id'),
+        'status': ('share', 'status'),
+        'tag': ('share', 'tag'),
+        'export_location': ('share', 'export_location')
+    }
+
+    fields = {
+        'instance_uuid': fields.UUIDField(),
+        'attachementID': fields.UUIDField(),
+        'share_id': fields.UUIDField(),
+        'status': fields.StringField(nullable=False),
+        'tag': fields.StringField(nullable=False),
+        'export_location': fields.StringField(nullable=False),
+    }
+
+    def __init__(self, share):
+        super(SharePayload, self).__init__()
+        self.populate_schema(share=share)
+
+    @classmethod
+    def from_instance(cls, instance):
+        """Returns a list of SharePayload objects based on the passed
+        shares.
+        """
+        if not CONF.notifications.include_share_mapping:
+            return None
+
+        instance_shares = instance.get_shares()
+        if instance_shares is not None:
+            return cls.from_shares(instance_shares)
+        else:
+            return []
+
+    @classmethod
+    def from_shares(cls, shares):
+        """Returns a list of SharePayload objects based on the passed
+        ShareMappingList.
+        """
+        payloads = []
+        for share in shares:
+            payloads.append(cls(share))
         return payloads
 
 
