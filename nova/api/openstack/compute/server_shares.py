@@ -71,7 +71,7 @@ class ServerSharesController(wsgi.Controller):
                                                                   server_id)
         return instance
 
-    @wsgi.Controller.api_version("2.92")
+    @wsgi.Controller.api_version("2.93")
     @wsgi.response(200)
     @wsgi.expected_errors((400, 401, 403, 404, 409))
     def index(self, req, server_id):
@@ -99,10 +99,10 @@ class ServerSharesController(wsgi.Controller):
 
         return self._view_builder._list_view(db_shares)
 
-    @wsgi.Controller.api_version("2.92")
+    @wsgi.Controller.api_version("2.93")
     @wsgi.response(201)
     @wsgi.expected_errors((400, 401, 403, 404, 409))
-    @validation.schema(schema.create, min_version='2.92')
+    @validation.schema(schema.create, min_version='2.93')
     def create(self, req, server_id, body):
         def sm_exists(context, server_id, share_id):
             try:
@@ -206,7 +206,7 @@ class ServerSharesController(wsgi.Controller):
 
         return view
 
-    @wsgi.Controller.api_version("2.92")
+    @wsgi.Controller.api_version("2.93")
     @wsgi.response(200)
     @wsgi.expected_errors((400, 401, 403, 404, 409))
     def show(self, req, server_id, id):
@@ -241,7 +241,7 @@ class ServerSharesController(wsgi.Controller):
 
         return view
 
-    @wsgi.Controller.api_version("2.92")
+    @wsgi.Controller.api_version("2.93")
     @wsgi.response(200)
     @wsgi.expected_errors((400, 401, 403, 404, 409))
     def delete(self, req, server_id, id):

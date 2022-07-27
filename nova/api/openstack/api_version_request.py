@@ -255,6 +255,12 @@ REST_API_VERSION_HISTORY = """REST API Version History:
     * 2.93 - Add support for volume backed server rebuild.
     * 2.94 - Adds new API ``GET /servers/{server_id}/shares`` which shows
              shares attachements of a given server.
+             ``GET /servers/{server_id}/shares/{share_id} which gives details
+             about a share attachement.
+             ``POST /servers/{server_id}/shares/{share_id} which create an
+             attachement.
+             ``DELETE /servers/{server_id}/shares/{share_id} which delete an
+             attachement.
 """
 
 # The minimum and maximum versions of the API supported

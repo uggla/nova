@@ -40,7 +40,7 @@ def return_invalid_server(compute_api, context, instance_id,
 
 
 class ServerSharesTest(BaseTestCase):
-    wsgi_api_version = '2.92'
+    wsgi_api_version = '2.93'
 
     def setUp(self):
         super(ServerSharesTest, self).setUp()
