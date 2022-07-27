@@ -20,8 +20,8 @@ from unittest import mock
 
 class ServerSharesBase(test_servers.ServersSampleBase):
     sample_dir = 'os-server-shares'
-    microversion = '2.92'
-    scenarios = [('v2_92', {'api_major_version': 'v2.1'})]
+    microversion = '2.93'
+    scenarios = [('v2_93', {'api_major_version': 'v2.1'})]
 
     def setUp(self):
         super(ServerSharesBase, self).setUp()

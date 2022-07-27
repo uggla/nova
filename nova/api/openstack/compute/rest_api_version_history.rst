@@ -1214,7 +1214,7 @@ Add support to pin a server to an availability zone or unpin a server from any a
 
 .. _microversion 2.92:
 
-2.92
+2.93
 ----
 
 The ``POST /os-keypairs`` API now forbids to generate a keypair and allows new

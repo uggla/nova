@@ -252,8 +252,15 @@ REST_API_VERSION_HISTORY = """REST API Version History:
     * 2.92 - Drop generation of keypair, add keypair name validation on
              ``POST /os-keypairs`` and allow including @ and dot (.) characters
              in keypair name.
-    * 2.93 - Adds new API ``GET /servers/{server_id}/shares`` which shows
+    * 2.93 - Adds support for
+             ``GET /servers/{server_id}/shares`` which shows
              shares attachements of a given server.
+             ``GET /servers/{server_id}/shares/{share_id} which gives details
+             about a share attachement.
+             ``POST /servers/{server_id}/shares/{share_id} which create an
+             attachement.
+             ``DELETE /servers/{server_id}/shares/{share_id} which delete an
+             attachement.
 """
 
 # The minimum and maximum versions of the API supported
@@ -262,7 +269,7 @@ REST_API_VERSION_HISTORY = """REST API Version History:
 # Note(cyeoh): This only applies for the v2.1 API once microversions
 # support is fully merged. It does not affect the V2 API.
 _MIN_API_VERSION = '2.1'
-_MAX_API_VERSION = '2.92'
+_MAX_API_VERSION = '2.93'
 DEFAULT_API_VERSION = _MIN_API_VERSION
 
 # Almost all proxy APIs which are related to network, images and baremetal
