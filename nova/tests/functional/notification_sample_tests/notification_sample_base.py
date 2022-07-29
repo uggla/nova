@@ -279,15 +279,6 @@ class NotificationSampleTestBase(test.TestCase,
             server['id'], {"volumeAttachment": {"volumeId": volume_id}})
         self._wait_for_notification('instance.volume_attach.end')
 
-    def _attach_share_to_server(self, server, share_id):
-        self.api.post_server_share(
-            server['id'], {"share": {"shareId": share_id}})
-        self._wait_for_notification('instance.share_attach.end')
-
-    def _detach_share_to_server(self, server, share_id):
-        self.api.delete_server_share(server['id'], share_id)
-        self._wait_for_notification('instance.share_detach.end')
-
     def _wait_and_get_migrations(self, server, max_retries=20):
         """Simple method to wait for the migrations
 
