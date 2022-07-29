@@ -1727,7 +1727,7 @@ class TestInstanceNotificationSample(
             "oslo_utils.uuidutils.generate_uuid",
             return_value="f7c1726d-7622-42b3-8b2c-4473239d60d1",
         ):
-            self._attach_share_to_server(
+            self._attach_share(
                 server, "e8debdc0-447a-4376-a10a-4cd9122d7986"
             )
 
@@ -1813,7 +1813,7 @@ class TestInstanceNotificationSample(
                 'oslo_utils.uuidutils.generate_uuid',
                 return_value='f7c1726d-7622-42b3-8b2c-4473239d60d1'):
             # Detach share
-            self._detach_share_to_server(
+            self._detach_share(
                 server, 'e8debdc0-447a-4376-a10a-4cd9122d7986')
 
         self.assertEqual(2, len(self.notifier.versioned_notifications),
