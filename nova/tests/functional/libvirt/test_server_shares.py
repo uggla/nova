@@ -15,16 +15,18 @@ from lxml import etree
 from requests import request
 
 from nova import context as nova_context
+from nova import exception
 from nova.objects import instance
+from nova.objects import share_mapping
 from nova.tests import fixtures as nova_fixtures
 from nova.tests.functional.libvirt import base
 
+from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
 
 from unittest import mock
-
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -120,4 +122,74 @@ class ServerSharesTest(ServerSharesTestBase):
 
         self._assert_share_in_metadata(
             self._get_metadata_url(server), share_id, share_id)
+
+    @mock.patch('nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver'
+                '.connect_volume',
+                side_effect=processutils.ProcessExecutionError)
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def test_server_share_mount_failure(self, mock_dns, mock_mount):
+        traits = self._get_provider_traits(self.compute_rp_uuids[self.compute])
+        for trait in ('COMPUTE_STORAGE_VIRTIO_FS', 'COMPUTE_MEM_BACKING_FILE'):
+            self.assertIn(trait, traits)
+        server = self._create_server(networks='auto')
+        self._stop_server(server)
+
+        share_id = '4b021746-d0eb-4031-92aa-23c3bec182cd'
+        self._attach_share(server, share_id)
+        self.api.post_server_action(server['id'], {'os-start': None})
+        self._wait_for_state_change(server, 'ERROR')
+        self.notifier.wait_for_versioned_notifications(
+            'instance.power_on.error')
+
+        sm = share_mapping.ShareMapping.get_by_instance_uuid_and_share_id(
+            self.context, server['id'], share_id)
+        self.assertEqual(sm.status, 'error')
+        self.instance = instance.Instance.get_by_uuid(
+            self.context, server['id'])
+        self.assertEqual(self.instance.vm_state, 'error')
+        return (server, share_id)
+
+    @mock.patch('nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver'
+                '.connect_volume',
+                side_effect=processutils.ProcessExecutionError)
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def test_detach_server_and_share_in_error(self, mock_dns, mock_mount):
+        """Ensure share can still be detached even if
+           server and share are in an error state.
+        """
+        server, share_id = self.test_server_share_mount_failure()
+        self._detach_share(server, share_id)
+
+        self.assertRaises(
+            exception.ShareNotFound,
+            share_mapping.ShareMapping.get_by_instance_uuid_and_share_id,
+            self.context,
+            server['id'],
+            share_id
+        )
+
+    @mock.patch('nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver'
+                '.disconnect_volume',
+                side_effect=processutils.ProcessExecutionError)
+    @mock.patch('nova.virt.libvirt.driver.LibvirtDriver._mount_share')
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def test_server_share_umount_failure(
+            self, mock_dns, mock_mount, mock_umount):
+        traits = self._get_provider_traits(self.compute_rp_uuids[self.compute])
+        for trait in ('COMPUTE_STORAGE_VIRTIO_FS', 'COMPUTE_MEM_BACKING_FILE'):
+            self.assertIn(trait, traits)
+        server = self._create_server(networks='auto')
+        self._stop_server(server)
+
+        share_id = '4b021746-d0eb-4031-92aa-23c3bec182cd'
+        self._attach_share(server, share_id)
+        self._start_server(server)
+        self._stop_server(server)
+
+        sm = share_mapping.ShareMapping.get_by_instance_uuid_and_share_id(
+            self.context, server['id'], share_id)
+        self.assertEqual(sm.status, 'error')
+        self.instance = instance.Instance.get_by_uuid(
+            self.context, server['id'])
+        self.assertEqual(self.instance.vm_state, 'stopped')
         return (server, share_id)
