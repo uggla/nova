@@ -12,19 +12,23 @@
 
 import fixtures
 from lxml import etree
+import os
 from requests import request
 
 from nova import context as nova_context
+from nova import exception
 from nova.objects import instance
+from nova.objects import share_mapping
 from nova.tests import fixtures as nova_fixtures
+from nova.tests.functional.api import client
 from nova.tests.functional.libvirt import base
 
+from oslo_concurrency import processutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
 
 from unittest import mock
-
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -168,6 +172,230 @@ class ServerSharesTest(ServerSharesTestBase):
             # tag is the filesystem target directory.
             # if post /server/{server_id}/share was called without a specific
             # tag then the tag is the share id.
+            self._assert_filesystem_tag(self._get_xml(server), share_id)
+
+            self._assert_share_in_metadata(
+                self._get_metadata_url(server), share_id, share_id)
+            return (server, share_id)
+
+    def test_server_share_after_hard_reboot(self):
+        """Verify that share is still available after a reboot"""
+        server, share_id = self.test_server_share_metadata()
+        self._reboot_server(server, hard=True)
+
+        self._assert_filesystem_tag(self._get_xml(server), share_id)
+
+        self._assert_share_in_metadata(
+            self._get_metadata_url(server), share_id, share_id)
+
+    def test_server_share_mount_failure(self):
+        os.environ['OS_DEBUG'] = "true"
+        traits = self._get_provider_traits(self.compute_rp_uuids[self.compute])
+        for trait in ('COMPUTE_STORAGE_VIRTIO_FS', 'COMPUTE_MEM_BACKING_FILE'):
+            self.assertIn(trait, traits)
+        with mock.patch(
+            'nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver'
+            '.connect_volume',
+            side_effect=processutils.ProcessExecutionError
+        ):
+            server = self._create_server(networks='auto')
+            self._stop_server(server)
+
+            # Here we are using CastAsCallFixture so we got an exception from
+            # nova compute. This should not happen without the fixture and
+            # the api should answer with a 201 status code.
+            share_id = '4b021746-d0eb-4031-92aa-23c3bec182cd'
+            self.assertRaises(
+                client.OpenStackApiException,
+                self._attach_share,
+                server,
+                share_id
+            )
+
+            log_out = self.stdlog.logger.output
+
+            self.assertIn(
+                "Share id 4b021746-d0eb-4031-92aa-23c3bec182cd mount error "
+                "from server",
+                log_out)
+
+            sm = share_mapping.ShareMapping.get_by_instance_uuid_and_share_id(
+                self.context, server['id'], share_id)
+            self.assertEqual(sm.status, 'error')
+            self.instance = instance.Instance.get_by_uuid(
+                self.context, server['id'])
+            self.assertEqual(self.instance.vm_state, 'stopped')
+            return (server, share_id)
+
+    def test_server_start_fails_share_in_error(self):
+        """Ensure a server can not start if its attached share is in error
+           status.
+        """
+        os.environ['OS_DEBUG'] = "true"
+        server, share_id = self.test_server_share_mount_failure()
+
+        # Here we are using CastAsCallFixture so we got an exception from
+        # nova api. This should not happen without the fixture.
+        self.assertRaises(
+            client.OpenStackApiException,
+            self._start_server,
+            server
+        )
+        log_out = self.stdlog.logger.output
+
+        self.assertIn(
+            "Share 4b021746-d0eb-4031-92aa-23c3bec182cd used by instance 1 "
+            "is in error state.",
+            log_out)
+        self._assert_filesystem_tag_not_present(
+            self._get_xml(server), share_id)
+        self.instance = instance.Instance.get_by_uuid(
+            self.context, server['id'])
+        self.assertEqual(self.instance.vm_state, 'error')
+
+    def test_detach_server_share_in_error(self):
+        """Ensure share can still be detached even if
+           the share are in an error state.
+        """
+        os.environ['OS_DEBUG'] = "true"
+        server, share_id = self.test_server_share_mount_failure()
+
+        # Simulate an attempt to detach that fail due to umount error.
+        # In that case we should have an umount error.
+        with mock.patch(
+            'nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver'
+            '.disconnect_volume',
+            side_effect=processutils.ProcessExecutionError
+        ) as mock_umount:
+
+            # Here we are using CastAsCallFixture so we got an exception from
+            # nova api. This should not happen without the fixture.
+            self.assertRaises(
+                client.OpenStackApiException,
+                self._detach_share,
+                server,
+                share_id
+            )
+
+            log_out = self.stdlog.logger.output
+
+            self.assertIn(
+                "Share id 4b021746-d0eb-4031-92aa-23c3bec182cd umount error",
+                log_out)
+
+            sm = share_mapping.ShareMapping.get_by_instance_uuid_and_share_id(
+                self.context, server['id'], share_id)
+            self.assertEqual(sm.status, 'error')
+            self.instance = instance.Instance.get_by_uuid(
+                self.context, server['id'])
+            self.assertEqual(self.instance.vm_state, 'stopped')
+
+            # Simulate an attempt to detach again after the op fixed the issue.
+            # In that case we should be able to detach properly.
+            mock_umount.side_effect = None
+            self._detach_share(server, share_id)
+
+            self.assertRaises(
+                exception.ShareNotFound,
+                share_mapping.ShareMapping.get_by_instance_uuid_and_share_id,
+                self.context,
+                server['id'],
+                share_id
+            )
+
+            self.instance = instance.Instance.get_by_uuid(
+                self.context, server['id'])
+            self.assertEqual(self.instance.vm_state, 'stopped')
+
+    @mock.patch('nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver'
+                '.disconnect_volume',
+                side_effect=processutils.ProcessExecutionError)
+    @mock.patch('nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver'
+                '.connect_volume')
+    def test_server_share_umount_failure(self, mock_mount, mock_umount):
+        os.environ['OS_DEBUG'] = "true"
+        traits = self._get_provider_traits(self.compute_rp_uuids[self.compute])
+        for trait in ('COMPUTE_STORAGE_VIRTIO_FS', 'COMPUTE_MEM_BACKING_FILE'):
+            self.assertIn(trait, traits)
+        server = self._create_server(networks='auto')
+        self._stop_server(server)
+
+        share_id = '4b021746-d0eb-4031-92aa-23c3bec182cd'
+        self._attach_share(server, share_id)
+        self._start_server(server)
+        self._stop_server(server)
+
+        # Here we are using CastAsCallFixture so we got an exception from
+        # nova compute. This should not happen without the fixture and
+        # the api should answer with a 202 status code.
+        self.assertRaises(
+            client.OpenStackApiException,
+            self._detach_share,
+            server,
+            share_id
+        )
+
+        log_out = self.stdlog.logger.output
+
+        self.assertIn(
+            "Share id 4b021746-d0eb-4031-92aa-23c3bec182cd umount error "
+            "from server",
+            log_out)
+
+        sm = share_mapping.ShareMapping.get_by_instance_uuid_and_share_id(
+            self.context, server['id'], share_id)
+        self.assertEqual(sm.status, 'error')
+        self.instance = instance.Instance.get_by_uuid(
+            self.context, server['id'])
+        self.assertEqual(self.instance.vm_state, 'stopped')
+        return (server, share_id)
+
+    def test_server_resume_with_shares(self):
+        with mock.patch(
+            'nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver.'
+            'disconnect_volume'
+        ), mock.patch(
+            'nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver.'
+            'connect_volume'
+        ):
+            server = self._create_server(networks='auto')
+            self._stop_server(server)
+
+            share_id = '4b021746-d0eb-4031-92aa-23c3bec182cd'
+            self._attach_share(server, share_id)
+            self._start_server(server)
+            self._suspend_server(server)
+            self._resume_server(server)
+
+            self._assert_filesystem_tag(self._get_xml(server), share_id)
+
+            self._assert_share_in_metadata(
+                self._get_metadata_url(server), share_id, share_id)
+            return (server, share_id)
+
+    def test_server_rescue_with_shares(self):
+        with mock.patch(
+            'nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver.'
+            'disconnect_volume'
+        ), mock.patch(
+            'nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver.'
+            'connect_volume'
+        ):
+            server = self._create_server(networks='auto')
+            self._stop_server(server)
+
+            share_id = '4b021746-d0eb-4031-92aa-23c3bec182cd'
+            self._attach_share(server, share_id)
+            self._start_server(server)
+            self._rescue_server(server)
+
+            self._assert_filesystem_tag(self._get_xml(server), share_id)
+
+            self._assert_share_in_metadata(
+                self._get_metadata_url(server), share_id, share_id)
+
+            self._unrescue_server(server)
+
             self._assert_filesystem_tag(self._get_xml(server), share_id)
 
             self._assert_share_in_metadata(
