@@ -3351,13 +3351,17 @@ class ComputeManager(manager.Manager):
             compute_utils.remove_shelved_keys_from_system_metadata(instance)
 
             instance.save(expected_task_state=task_states.POWERING_ON)
-            self._notify_about_instance_usage(
-                context, instance, "power_on.end")
+        except exception.ShareMountError as e:
+            self._set_instance_obj_error_state(instance, clean_task_state=True)
             compute_utils.notify_about_instance_action(context, instance,
                 self.host, action=fields.NotificationAction.POWER_ON,
-                phase=fields.NotificationPhase.END)
-        except exception.ShareMountError:
-            self._set_instance_obj_error_state(instance, clean_task_state=True)
+                phase=fields.NotificationPhase.ERROR,
+                exception=e)
+        self._notify_about_instance_usage(
+            context, instance, "power_on.end")
+        compute_utils.notify_about_instance_action(context, instance,
+            self.host, action=fields.NotificationAction.POWER_ON,
+            phase=fields.NotificationPhase.END)
 
     @messaging.expected_exceptions(NotImplementedError,
                                    exception.TriggerCrashDumpNotSupported,
