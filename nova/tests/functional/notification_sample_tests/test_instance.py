@@ -385,6 +385,7 @@ class TestInstanceNotificationSample(
             self._test_lock_unlock_instance,
             self._test_lock_unlock_instance_with_reason,
             self._test_share_attach_detach,
+            self._test_share_power_on_failure,
         ]
 
         for action in actions:
@@ -1858,6 +1859,58 @@ class TestInstanceNotificationSample(
                 'power_state': 'running',
             },
             actual=self.notifier.versioned_notifications[1])
+
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def _test_share_power_on_failure(self, server, mock_dns):
+        self.api.post_server_action(server['id'], {'os-stop': {}})
+        self._wait_for_state_change(server, expected_status='SHUTOFF')
+
+        # Restart server with a failure
+        self.notifier.reset()
+        with mock.patch(
+            'nova.compute.manager.ComputeManager._power_on',
+            side_effect=exception.ShareMountError(
+                    share_id='8db0037b-e98f-4bde-ae71-f96a077c19a4'
+                )
+        ):
+            self.api.post_server_action(server['id'], {'os-start': {}})
+            self._wait_for_state_change(server, expected_status='ERROR')
+        self.assertEqual(3, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        self._verify_notification(
+            'instance-power_on-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown',
+            },
+            actual=self.notifier.versioned_notifications[0])
+        self._verify_notification(
+            'instance-power_on-error',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'error',
+                'task_state': None,
+                'fault': self.ANY,
+            },
+            actual=self.notifier.versioned_notifications[1])
+        self._verify_notification(
+            'instance-power_on-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'error',
+                # 'task_state': None,
+                'power_state': 'shutdown',
+                # 'fault': self.ANY,
+            },
+            actual=self.notifier.versioned_notifications[2])
+
+        # We need to hard reboot the instance to get out error state.
+        self.api.post_server_action(server['id'], {'reboot': {'type': 'HARD'}})
+        self._wait_for_state_change(server, expected_status='ACTIVE')
 
     def _test_rescue_unrescue_server(self, server):
         # Both "rescue" and "unrescue" notification asserts are made here
