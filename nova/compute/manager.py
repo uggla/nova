@@ -3261,12 +3261,15 @@ class ComputeManager(manager.Manager):
 
                 set_instance_state_to_stopped(instance, expected_task_state)
 
-            except exception.ShareUmountError:
+            except exception.ShareUmountError as e:
                 # In this case we should stop the instance despite the error
                 # to not be stuck with the instance on that will prevent to
                 # remove the share and fix the error.
                 set_instance_state_to_stopped(instance, expected_task_state)
-                # TODO(uggla) add error notification
+                compute_utils.notify_about_instance_action(context, instance,
+                    self.host, action=fields.NotificationAction.POWER_OFF,
+                    phase=fields.NotificationPhase.ERROR,
+                    exception=e)
 
             self._notify_about_instance_usage(context, instance,
                                               "power_off.end")
