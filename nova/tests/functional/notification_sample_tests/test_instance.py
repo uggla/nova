@@ -387,6 +387,7 @@ class TestInstanceNotificationSample(
             self._test_lock_unlock_instance_with_reason,
             self._test_share_attach_detach,
             self._test_share_power_on_failure,
+            self._test_share_power_off_failure
         ]
 
         for action in actions:
@@ -1913,6 +1914,98 @@ class TestInstanceNotificationSample(
                 # 'task_state': None,
                 'power_state': 'shutdown',
                 # 'fault': self.ANY,
+            },
+            actual=self.notifier.versioned_notifications[2])
+
+        # We need to hard reboot the instance to get out error state.
+        self.api.post_server_action(server['id'], {'reboot': {'type': 'HARD'}})
+        self._wait_for_state_change(server, expected_status='ACTIVE')
+
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def _test_share_power_off_failure(self, server, mock_dns):
+        expected_shares = [
+            {'nova_object.name': 'SharePayload',
+             'nova_object.namespace': 'nova',
+             'nova_object.version': '1.0',
+             'nova_object.data': {
+                 'instance_uuid': server['id'],
+                 'attachementID': 'f7c1726d-7622-42b3-8b2c-4473239d60d1',
+                 'share_id': 'e8debdc0-447a-4376-a10a-4cd9122d7986',
+                 'status': 'inactive',
+                 'tag': 'e8debdc0-447a-4376-a10a-4cd9122d7986',
+                 'export_location': '10.0.0.50:/mnt/foo'}
+             }
+        ]
+
+        self.api.post_server_action(server['id'], {'os-stop': {}})
+        self._wait_for_state_change(server, expected_status='SHUTOFF')
+
+        # Return a constant share uuid
+        with mock.patch(
+                'oslo_utils.uuidutils.generate_uuid',
+                return_value='f7c1726d-7622-42b3-8b2c-4473239d60d1'):
+            # Attach share
+            self._attach_share_to_server(
+                server, 'e8debdc0-447a-4376-a10a-4cd9122d7986')
+
+        self.notifier.reset()
+        self.api.post_server_action(server['id'], {'os-start': {}})
+        self._wait_for_state_change(server, expected_status='ACTIVE')
+
+        # Stop server with a failure
+        self.notifier.reset()
+        with mock.patch(
+            'nova.objects.share_mapping.ShareMapping.detach',
+            side_effect=exception.ShareUmountError(
+                share_id='e8debdc0-447a-4376-a10a-4cd9122d7986',
+                server_id=server['id'],
+                reason=processutils.ProcessExecutionError(
+                    stdout='This is stdout',
+                    stderr='This is stderror',
+                    exit_code=1,
+                    cmd="umount"
+                )
+            )
+        ):
+            self.api.post_server_action(server['id'], {'os-stop': {}})
+            self._wait_for_state_change(server, expected_status='SHUTOFF')
+
+        self.assertEqual(3, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        expected_shares[0]['nova_object.data']['status'] = 'active'
+        self._verify_notification(
+            'instance-power_off-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'active',
+                'power_state': 'running',
+                'shares': expected_shares
+            },
+            actual=self.notifier.versioned_notifications[0])
+        # Warning: we are using the fake driver here so the share status will
+        # never be changed to error and remains active.
+        # So the two following tests will check for a share status active.
+        self._verify_notification(
+            'instance-power_off-error',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown',
+                'task_state': None,
+                'fault': self.ANY,
+                'shares': expected_shares
+            },
+            actual=self.notifier.versioned_notifications[1])
+        self._verify_notification(
+            'instance-power_off-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown',
+                'shares': expected_shares
             },
             actual=self.notifier.versioned_notifications[2])
 
