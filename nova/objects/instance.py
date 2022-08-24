@@ -105,7 +105,7 @@ _NO_DATA_SENTINEL = object()
 
 # TODO(berrange): Remove NovaObjectDictCompat
 @base.NovaObjectRegistry.register
-class Instance(base.NovaPersistentObject, base.NovaObject,
+class Instance(base.NovaPersistentSoftDeleteObject, base.NovaObject,
                base.NovaObjectDictCompat):
     # Version 2.0: Initial version
     # Version 2.1: Added services

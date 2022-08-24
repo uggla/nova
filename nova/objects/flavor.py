@@ -193,9 +193,11 @@ def _flavor_destroy(context, flavor_id=None, flavorid=None):
 
 
 # TODO(berrange): Remove NovaObjectDictCompat
-# TODO(mriedem): Remove NovaPersistentObject in version 2.0
+# TODO(Uggla): This object does not require soft delete, inheritance from
+# NovaPersistentSoftDeleteObject should be replaced with NovaPersistentObject
+# in version 2.0
 @base.NovaObjectRegistry.register
-class Flavor(base.NovaPersistentObject, base.NovaObject,
+class Flavor(base.NovaPersistentSoftDeleteObject, base.NovaObject,
              base.NovaObjectDictCompat):
     # Version 1.0: Initial version
     # Version 1.1: Added save_projects(), save_extra_specs(), removed

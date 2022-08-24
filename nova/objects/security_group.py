@@ -26,7 +26,7 @@ from nova.objects import fields
 
 
 @base.NovaObjectRegistry.register
-class SecurityGroup(base.NovaPersistentObject, base.NovaObject):
+class SecurityGroup(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: String attributes updated to support unicode
     # Version 1.2: Added uuid field for Neutron security groups.

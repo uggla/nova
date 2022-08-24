@@ -241,7 +241,7 @@ SERVICE_VERSION_ALIASES = {
 
 # TODO(berrange): Remove NovaObjectDictCompat
 @base.NovaObjectRegistry.register
-class Service(base.NovaPersistentObject, base.NovaObject,
+class Service(base.NovaPersistentSoftDeleteObject, base.NovaObject,
               base.NovaObjectDictCompat):
     # Version 1.0: Initial version
     # Version 1.1: Added compute_node nested object

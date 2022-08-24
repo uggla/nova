@@ -35,7 +35,7 @@ LOG = logging.getLogger(__name__)
 
 
 @base.NovaObjectRegistry.register
-class InstanceMapping(base.NovaTimestampObject, base.NovaObject):
+class InstanceMapping(base.NovaPersistentObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: Add queued_for_delete
     # Version 1.2: Add user_id

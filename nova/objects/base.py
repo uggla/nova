@@ -94,7 +94,6 @@ remotable_classmethod = ovoo_base.remotable_classmethod
 remotable = ovoo_base.remotable
 obj_make_list = ovoo_base.obj_make_list
 NovaObjectDictCompat = ovoo_base.VersionedObjectDictCompat
-NovaTimestampObject = ovoo_base.TimestampedObject
 
 
 class NovaObject(ovoo_base.VersionedObject):
@@ -131,10 +130,19 @@ class NovaObject(ovoo_base.VersionedObject):
             self._context = original_context
 
 
-class NovaPersistentObject(object):
-    """Mixin class for Persistent objects.
+# Create an alias of the ovo mixin.
+# NovaPersistentObject must be used for common persistent objects.
+NovaPersistentObject = ovoo_base.TimestampedObject
 
-    This adds the fields that we use in common for most persistent objects.
+
+class NovaPersistentSoftDeleteObject(NovaPersistentObject):
+    """Mixin class for persistent soft delete objects.
+
+    This adds the fields that we use in common for most persistent soft
+    delete objects.
+    Soft delete objects are deprecated and should not be used anymore.
+    So this class is used for compatibility with old objects that require
+    soft delete feature.
     """
     fields = {
         'created_at': obj_fields.DateTimeField(nullable=True),
@@ -143,10 +151,11 @@ class NovaPersistentObject(object):
         'deleted': obj_fields.BooleanField(default=False),
         }
 
-
 # NOTE(danms): This is copied from oslo.versionedobjects ahead of
 #              a release. Do not use it directly or modify it.
 # TODO(danms): Remove this when we can get it from oslo.versionedobjects
+
+
 class EphemeralObject(object):
     """Mix-in to provide more recognizable field defaulting.
 

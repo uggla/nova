@@ -30,7 +30,7 @@ LOG = logging.getLogger(__name__)
 
 
 @base.NovaObjectRegistry.register
-class BuildRequest(base.NovaObject):
+class BuildRequest(base.NovaPersistentObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: Added block_device_mappings
     # Version 1.2: Added save() method
@@ -43,11 +43,6 @@ class BuildRequest(base.NovaObject):
         'project_id': fields.StringField(),
         'instance': fields.ObjectField('Instance'),
         'block_device_mappings': fields.ObjectField('BlockDeviceMappingList'),
-        # NOTE(alaski): Normally these would come from the NovaPersistentObject
-        # mixin but they're being set explicitly because we only need
-        # created_at/updated_at. There is no soft delete for this object.
-        'created_at': fields.DateTimeField(nullable=True),
-        'updated_at': fields.DateTimeField(nullable=True),
         'tags': fields.ObjectField('TagList'),
     }
 

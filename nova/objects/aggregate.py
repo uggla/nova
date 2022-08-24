@@ -226,7 +226,10 @@ def _aggregate_update_to_db(context, aggregate_id, values):
 
 
 @base.NovaObjectRegistry.register
-class Aggregate(base.NovaPersistentObject, base.NovaObject):
+# TODO(Uggla): This object does not require soft delete, inheritance from
+# NovaPersistentSoftDeleteObject should be replaced with NovaPersistentObject
+# in version 2.0
+class Aggregate(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: String attributes updated to support unicode
     # Version 1.2: Added uuid field

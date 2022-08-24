@@ -25,7 +25,7 @@ from nova.objects import fields
 
 # TODO(berrange): Remove NovaObjectDictCompat
 @base.NovaObjectRegistry.register
-class InstanceAction(base.NovaPersistentObject, base.NovaObject,
+class InstanceAction(base.NovaPersistentSoftDeleteObject, base.NovaObject,
                      base.NovaObjectDictCompat):
     # Version 1.0: Initial version
     # Version 1.1: String attributes updated to support unicode
@@ -133,7 +133,7 @@ class InstanceActionList(base.ObjectListBase, base.NovaObject):
 
 # TODO(berrange): Remove NovaObjectDictCompat
 @base.NovaObjectRegistry.register
-class InstanceActionEvent(base.NovaPersistentObject, base.NovaObject,
+class InstanceActionEvent(base.NovaPersistentSoftDeleteObject, base.NovaObject,
                           base.NovaObjectDictCompat):
     # Version 1.0: Initial version
     # Version 1.1: event_finish_with_failure decorated with serialize_args

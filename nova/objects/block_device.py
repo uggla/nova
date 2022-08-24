@@ -42,7 +42,7 @@ def _expected_cols(expected_attrs):
 
 # TODO(berrange): Remove NovaObjectDictCompat
 @base.NovaObjectRegistry.register
-class BlockDeviceMapping(base.NovaPersistentObject, base.NovaObject,
+class BlockDeviceMapping(base.NovaPersistentSoftDeleteObject, base.NovaObject,
                          base.NovaObjectDictCompat):
     # Version 1.0: Initial version
     # Version 1.1: Add instance_uuid to get_by_volume_id method

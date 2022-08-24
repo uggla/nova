@@ -16,7 +16,7 @@ from nova.objects import fields
 
 
 @base.NovaObjectRegistry.register
-class VolumeUsage(base.NovaPersistentObject, base.NovaObject):
+class VolumeUsage(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     # Version 1.0: Initial version
     VERSION = '1.0'
 

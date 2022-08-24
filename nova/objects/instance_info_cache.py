@@ -24,7 +24,7 @@ LOG = logging.getLogger(__name__)
 
 
 @base.NovaObjectRegistry.register
-class InstanceInfoCache(base.NovaPersistentObject, base.NovaObject):
+class InstanceInfoCache(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: Converted network_info to store the model.
     # Version 1.2: Added new() and update_cells kwarg to save().

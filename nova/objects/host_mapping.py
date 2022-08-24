@@ -41,7 +41,7 @@ def _apply_updates(context, db_mapping, updates):
 
 
 @base.NovaObjectRegistry.register
-class HostMapping(base.NovaTimestampObject, base.NovaObject):
+class HostMapping(base.NovaPersistentObject, base.NovaObject):
     # Version 1.0: Initial version
     VERSION = '1.0'
 

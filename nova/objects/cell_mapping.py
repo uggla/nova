@@ -65,7 +65,7 @@ def _parse_netloc(netloc):
 
 
 @base.NovaObjectRegistry.register
-class CellMapping(base.NovaTimestampObject, base.NovaObject):
+class CellMapping(base.NovaPersistentObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: Added disabled field
     VERSION = '1.1'

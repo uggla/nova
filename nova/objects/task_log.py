@@ -16,7 +16,7 @@ from nova.objects import fields
 
 
 @base.NovaObjectRegistry.register
-class TaskLog(base.NovaPersistentObject, base.NovaObject):
+class TaskLog(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     # Version 1.0: Initial version
     VERSION = '1.0'
 

@@ -31,7 +31,7 @@ CONF = nova.conf.CONF
 
 
 @base.NovaObjectRegistry.register
-class ComputeNode(base.NovaPersistentObject, base.NovaObject):
+class ComputeNode(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: Added get_by_service_id()
     # Version 1.2: String attributes updated to support unicode

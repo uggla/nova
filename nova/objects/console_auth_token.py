@@ -33,7 +33,7 @@ LOG = logging.getLogger(__name__)
 
 
 @base.NovaObjectRegistry.register
-class ConsoleAuthToken(base.NovaTimestampObject, base.NovaObject):
+class ConsoleAuthToken(base.NovaPersistentObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: Add clean_expired_console_auths method.
     #              The clean_expired_console_auths_for_host method

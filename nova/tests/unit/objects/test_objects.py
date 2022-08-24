@@ -38,12 +38,12 @@ from nova.tests import fixtures as nova_fixtures
 from nova import utils
 
 
-class MyOwnedObject(base.NovaPersistentObject, base.NovaObject):
+class MyOwnedObject(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     VERSION = '1.0'
     fields = {'baz': fields.IntegerField()}
 
 
-class MyObj(base.NovaPersistentObject, base.NovaObject,
+class MyObj(base.NovaPersistentSoftDeleteObject, base.NovaObject,
             base.NovaObjectDictCompat):
     VERSION = '1.6'
     fields = {'foo': fields.IntegerField(default=1),
@@ -564,7 +564,7 @@ class _TestObject(object):
         self.assertRaises(AttributeError, obj.get, 'nothing', 3)
 
     def test_object_inheritance(self):
-        base_fields = base.NovaPersistentObject.fields.keys()
+        base_fields = base.NovaPersistentSoftDeleteObject.fields.keys()
         myobj_fields = (['foo', 'bar', 'missing',
                          'readonly', 'rel_object',
                          'rel_objects', 'mutable_default'] +

@@ -84,7 +84,7 @@ def _destroy_in_db(context, user_id, name):
 
 # TODO(berrange): Remove NovaObjectDictCompat
 @base.NovaObjectRegistry.register
-class KeyPair(base.NovaPersistentObject, base.NovaObject,
+class KeyPair(base.NovaPersistentSoftDeleteObject, base.NovaObject,
               base.NovaObjectDictCompat):
     # Version 1.0: Initial version
     # Version 1.1: String attributes updated to support unicode

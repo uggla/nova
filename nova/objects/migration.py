@@ -39,7 +39,7 @@ def determine_migration_type(migration):
 
 
 @base.NovaObjectRegistry.register
-class Migration(base.NovaPersistentObject, base.NovaObject):
+class Migration(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: String attributes updated to support unicode
     # Version 1.2: Added migration_type and hidden

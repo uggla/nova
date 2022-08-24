@@ -115,7 +115,7 @@ def glance_type_to_ec2_type(image_type):
 
 
 @base.NovaObjectRegistry.register
-class EC2InstanceMapping(base.NovaPersistentObject, base.NovaObject):
+class EC2InstanceMapping(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     # Version 1.0: Initial version
     VERSION = '1.0'
 
@@ -154,7 +154,7 @@ class EC2InstanceMapping(base.NovaPersistentObject, base.NovaObject):
 
 
 @base.NovaObjectRegistry.register
-class S3ImageMapping(base.NovaPersistentObject, base.NovaObject):
+class S3ImageMapping(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     # Version 1.0: Initial version
     VERSION = '1.0'
 

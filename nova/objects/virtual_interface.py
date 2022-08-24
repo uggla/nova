@@ -31,7 +31,7 @@ FAKE_UUID = '00000000-0000-0000-0000-000000000000'
 
 
 @base.NovaObjectRegistry.register
-class VirtualInterface(base.NovaPersistentObject, base.NovaObject):
+class VirtualInterface(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: Add tag field
     # Version 1.2: Adding a save method

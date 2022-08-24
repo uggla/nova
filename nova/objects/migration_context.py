@@ -26,7 +26,7 @@ LOG = logging.getLogger(__name__)
 
 
 @base.NovaObjectRegistry.register
-class MigrationContext(base.NovaPersistentObject, base.NovaObject):
+class MigrationContext(base.NovaPersistentSoftDeleteObject, base.NovaObject):
     """Data representing additional resources related to a migration.
 
     Some resources cannot be calculated from knowing the flavor alone for the

@@ -30,7 +30,7 @@ NULLABLE_INTEGER_FIELDS = ['size', 'virtual_size']
 
 
 @base.NovaObjectRegistry.register
-class ImageMeta(base.NovaObject):
+class ImageMeta(base.NovaPersistentObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: updated ImageMetaProps
     # Version 1.2: ImageMetaProps version 1.2
@@ -66,8 +66,6 @@ class ImageMeta(base.NovaObject):
         'virtual_size': fields.IntegerField(),
         'container_format': fields.StringField(),
         'disk_format': fields.StringField(),
-        'created_at': fields.DateTimeField(nullable=True),
-        'updated_at': fields.DateTimeField(nullable=True),
         'tags': fields.ListOfStringsField(),
         'direct_url': fields.StringField(),
         'min_ram': fields.IntegerField(),

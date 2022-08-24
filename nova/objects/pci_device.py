@@ -35,7 +35,7 @@ LOG = logging.getLogger(__name__)
 def compare_pci_device_attributes(obj_a, obj_b):
     if not isinstance(obj_b, PciDevice):
         return False
-    pci_ignore_fields = base.NovaPersistentObject.fields.keys()
+    pci_ignore_fields = base.NovaPersistentSoftDeleteObject.fields.keys()
     for name in obj_a.obj_fields:
         if name in pci_ignore_fields:
             continue
@@ -50,7 +50,7 @@ def compare_pci_device_attributes(obj_a, obj_b):
 
 
 @base.NovaObjectRegistry.register
-class PciDevice(base.NovaPersistentObject, base.NovaObject):
+class PciDevice(base.NovaPersistentSoftDeleteObject, base.NovaObject):
 
     """Object to represent a PCI device on a compute node.
 

@@ -103,9 +103,11 @@ def _instance_group_members_add_by_uuid(context, group_uuid, members):
 
 
 # TODO(berrange): Remove NovaObjectDictCompat
-# TODO(mriedem): Replace NovaPersistentObject with TimestampedObject in v2.0.
+# TODO(Uggla): This object does not require soft delete, inheritance from
+# NovaPersistentSoftDeleteObject should be replaced with NovaPersistentObject
+# in version 2.0
 @base.NovaObjectRegistry.register
-class InstanceGroup(base.NovaPersistentObject, base.NovaObject,
+class InstanceGroup(base.NovaPersistentSoftDeleteObject, base.NovaObject,
                     base.NovaObjectDictCompat):
     # Version 1.0: Initial version
     # Version 1.1: String attributes updated to support unicode
@@ -186,7 +188,8 @@ class InstanceGroup(base.NovaPersistentObject, base.NovaObject,
             # the api database, we have removed soft-delete, so
             # the object fields for delete must be filled in with
             # default values for db models from the api database.
-            # TODO(mriedem): Remove this when NovaPersistentObject is removed.
+            # TODO(mriedem): Remove this when NovaPersistentSoftDeleteObject
+            # is removed.
             ignore = {'deleted': False,
                       'deleted_at': None}
             if '_rules' == field:

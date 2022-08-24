@@ -28,7 +28,7 @@ LOG = logging.getLogger(__name__)
 
 # TODO(berrange): Remove NovaObjectDictCompat
 @base.NovaObjectRegistry.register
-class InstanceFault(base.NovaPersistentObject, base.NovaObject,
+class InstanceFault(base.NovaPersistentSoftDeleteObject, base.NovaObject,
                     base.NovaObjectDictCompat):
     # Version 1.0: Initial version
     # Version 1.1: String attributes updated to support unicode
