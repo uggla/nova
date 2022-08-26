@@ -19,6 +19,7 @@ from nova import exception
 from nova.objects import instance
 from nova.objects import share_mapping
 from nova.tests import fixtures as nova_fixtures
+from nova.tests.functional.api import client
 from nova.tests.functional.libvirt import base
 
 from oslo_concurrency import processutils
@@ -122,6 +123,21 @@ class ServerSharesTest(ServerSharesTestBase):
 
         self._assert_share_in_metadata(
             self._get_metadata_url(server), share_id, share_id)
+        return (server, share_id)
+
+    @mock.patch('nova.virt.libvirt.driver.LibvirtDriver._umount_share')
+    @mock.patch('nova.virt.libvirt.driver.LibvirtDriver._mount_share')
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def test_server_share_after_hard_reboot(
+            self, mock_dns, mock_mount, mock_umount):
+        """Verify that share is still available after a reboot"""
+        server, share_id = self.test_server_share_metadata()
+        self._reboot_server(server, hard=True)
+
+        self._assert_filesystem_tag(self._get_xml(server), share_id)
+
+        self._assert_share_in_metadata(
+            self._get_metadata_url(server), share_id, share_id)
 
     @mock.patch('nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver'
                 '.connect_volume',
@@ -167,6 +183,36 @@ class ServerSharesTest(ServerSharesTestBase):
             server['id'],
             share_id
         )
+
+    @mock.patch('nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver'
+                '.connect_volume',
+                side_effect=processutils.ProcessExecutionError)
+    @mock.patch('socket.gethostbyname', return_value='192.168.122.152')
+    def test_reboot_server_and_share_in_error(self, mock_dns, mock_mount):
+        """Ensure share can still be detached even if
+           server and share are in an error state.
+        """
+        server, share_id = self.test_server_share_mount_failure()
+
+        # Attempt to reboot should fail with the ShareMountError as the share
+        # still have the issue.
+        exc = self.assertRaises(
+            client.OpenStackApiException,
+            self._reboot_server,
+            server,
+            hard=True
+        )
+
+        self.assertEqual(exc.response.status_code, 409)
+        self.assertIn("mount error", str(exc))
+
+        # Now detach the share and reboot again
+        self._detach_share(server, share_id)
+        self._reboot_server(server, hard=True)
+
+        self.instance = instance.Instance.get_by_uuid(
+            self.context, server['id'])
+        self.assertEqual(self.instance.vm_state, 'active')
 
     @mock.patch('nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver'
                 '.disconnect_volume',

@@ -3115,7 +3115,7 @@ class ComputeTestCase(BaseTestCase,
             'args': (econtext, instance, expected_nw_info,
                      reboot_type),
             'kwargs': {'block_device_info': fake_block_dev_info,
-                       'accel_info': []}}
+                       'accel_info': [], 'share_info': []}}
         fault = exception.InstanceNotFound(instance_id='instance-0000')
 
         def fake_reboot(self, *args, **kwargs):
@@ -3261,7 +3261,8 @@ class ComputeTestCase(BaseTestCase,
             mock.ANY, instance, mock.ANY, reboot_type,
             block_device_info=mock.ANY,
             bad_volumes_callback=mock.ANY,
-            accel_info=accel_info or []
+            accel_info=accel_info or [],
+            share_info=[]
         )
 
         return instance['uuid']
@@ -3282,6 +3283,59 @@ class ComputeTestCase(BaseTestCase,
     def test_reboot_with_accels_no_dp(self, mock_get_arqs):
         self._test_reboot_with_accels(extra_specs=None, accel_info=None)
         mock_get_arqs.assert_not_called()
+
+    @mock.patch('nova.virt.fake.FakeDriver.reboot')
+    @mock.patch('nova.objects.instance.Instance.save')
+    @mock.patch.object(objects.BlockDeviceMappingList, 'get_by_instance_uuid')
+    @mock.patch.object(compute_manager.ComputeManager,
+                           '_get_instance_block_device_info')
+    @mock.patch.object(compute_manager.ComputeManager,
+                       '_notify_about_instance_usage')
+    @mock.patch.object(compute_manager.ComputeManager, '_instance_update')
+    @mock.patch.object(db, 'instance_update_and_get_original')
+    @mock.patch.object(compute_manager.ComputeManager, '_get_power_state')
+    @mock.patch('nova.compute.utils.notify_about_instance_action')
+    @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
+    def test_reboot_with_share_info(
+        self,
+        mock_share,
+        mock_notify_action,
+        mock_get_power,
+        mock_get_orig,
+        mock_update,
+        mock_notify_usage,
+        mock_get_blk,
+        mock_get_bdms,
+        mock_inst_save,
+        mock_reboot
+    ):
+        reboot_type = 'SOFT'
+        instance = self._create_fake_instance_obj()
+
+        share_mapping = objects.ShareMapping(self.context)
+        share_mapping.uuid = uuids.share_mapping
+        share_mapping.instance_uuid = uuids.instance
+        share_mapping.share_id = uuids.share
+        share_mapping.status = 'inactive'
+        share_mapping.tag = 'fake_tag'
+        share_mapping.export_location = 'fake_export_location'
+        share_mapping.share_proto = 'NFS'
+
+        share_info = [share_mapping]
+        mock_share.return_value = share_info
+
+        self.compute.reboot_instance(self.context, instance=instance,
+             block_device_info=None, reboot_type=reboot_type)
+
+        mock_reboot.assert_called_once_with(
+            mock.ANY, instance, mock.ANY, reboot_type,
+            block_device_info=mock.ANY,
+            bad_volumes_callback=mock.ANY,
+            accel_info=mock.ANY,
+            share_info=share_info
+        )
+
+        return instance['uuid']
 
     @mock.patch.object(jsonutils, 'to_primitive')
     def test_reboot_fail(self, mock_to_primitive):
