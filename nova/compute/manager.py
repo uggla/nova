@@ -4361,6 +4361,8 @@ class ComputeManager(manager.Manager):
 
         accel_info = self._get_accel_info(context, instance)
 
+        share_info = self._get_share_info(context, instance)
+
         self._notify_about_instance_usage(context, instance, "reboot.start")
         compute_utils.notify_about_instance_action(
             context, instance, self.host,
@@ -4384,6 +4386,14 @@ class ComputeManager(manager.Manager):
             self._handle_bad_volumes_detached(
                     context, instance, bad_devices, block_device_info)
 
+        def is_share_error(share_info):
+            return any(
+                [
+                    share_mapping.status == fields.ShareMappingStatus.ERROR
+                    for share_mapping in share_info
+                ]
+            )
+
         try:
             # Don't change it out of rescue mode
             if instance.vm_state == vm_states.RESCUED:
@@ -4398,11 +4408,17 @@ class ComputeManager(manager.Manager):
                 instance.task_state = task_states.REBOOT_STARTED_HARD
                 expected_state = task_states.REBOOT_PENDING_HARD
             instance.save(expected_task_state=expected_state)
+
+            if reboot_type == "HARD" and is_share_error(share_info):
+                # Attempt to mount the shares again.
+                self._mount_all_shares(context, instance, share_info)
+
             self.driver.reboot(context, instance,
                                network_info,
                                reboot_type,
                                block_device_info=block_device_info,
                                accel_info=accel_info,
+                               share_info=share_info,
                                bad_volumes_callback=bad_volumes_callback)
 
         except Exception as error:
