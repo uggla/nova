@@ -1036,6 +1036,8 @@ class ServersController(wsgi.Controller):
             self.compute_api.reboot(context, instance, reboot_type)
         except exception.InstanceIsLocked as e:
             raise exc.HTTPConflict(explanation=e.format_message())
+        except exception.ShareMountError as e:
+            raise exc.HTTPConflict(explanation=e.format_message())
         except exception.InstanceInvalidState as state_error:
             common.raise_http_conflict_for_instance_invalid_state(state_error,
                     'reboot', id)
