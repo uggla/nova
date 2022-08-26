@@ -490,7 +490,7 @@ class PowerVMDriver(driver.ComputeDriver):
 
     def reboot(self, context, instance, network_info, reboot_type,
                block_device_info=None, bad_volumes_callback=None,
-               accel_info=None):
+               accel_info=None, share_info=None):
         """Reboot the specified instance.
 
         After this is called successfully, the instance's state
