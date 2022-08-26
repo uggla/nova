@@ -138,6 +138,16 @@ class ServerSharesTest(ServerSharesTestBase):
                 self._get_metadata_url(server), share_id, share_id)
             return (server, share_id)
 
+    def test_server_share_after_hard_reboot(self):
+        """Verify that share is still available after a reboot"""
+        server, share_id = self.test_server_share_metadata()
+        self._reboot_server(server, hard=True)
+
+        self._assert_filesystem_tag(self._get_xml(server), share_id)
+
+        self._assert_share_in_metadata(
+            self._get_metadata_url(server), share_id, share_id)
+
     def test_server_share_mount_failure(self):
         traits = self._get_provider_traits(self.compute_rp_uuids[self.compute])
         for trait in ('COMPUTE_STORAGE_VIRTIO_FS', 'COMPUTE_MEM_BACKING_FILE'):
