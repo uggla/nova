@@ -4253,6 +4253,8 @@ class ComputeManager(manager.Manager):
 
         accel_info = self._get_accel_info(context, instance)
 
+        share_info = self._get_share_info(context, instance)
+
         self._notify_about_instance_usage(context, instance, "reboot.start")
         compute_utils.notify_about_instance_action(
             context, instance, self.host,
@@ -4295,6 +4297,7 @@ class ComputeManager(manager.Manager):
                                reboot_type,
                                block_device_info=block_device_info,
                                accel_info=accel_info,
+                               share_info=share_info,
                                bad_volumes_callback=bad_volumes_callback)
 
         except Exception as error:
