@@ -16643,7 +16643,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         mock_create_guest_with_network.assert_called_once_with(
                 self.context, dummyxml, instance, network_info,
                 block_device_info, vifs_already_plugged=True,
-                external_events=[], share_info=share_info)
+                external_events=[])
 
     @mock.patch('nova.objects.instance.Instance.save',
                 return_value=None)
@@ -16754,7 +16754,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         mock_create_guest_with_network.assert_called_once_with(
             self.context, dummyxml, instance, network_info, block_device_info,
             vifs_already_plugged=True,
-            external_events=[], share_info=share_drv_info)
+            external_events=[])
 
     @mock.patch('nova.objects.instance.Instance.save',
                 return_value=None)
@@ -16799,7 +16799,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
             external_events=[
                 ('network-vif-plugged', uuids.vif1),
                 ('network-vif-plugged', uuids.vif3),
-            ], share_info=[]
+            ]
         )
 
     @mock.patch('nova.objects.instance.Instance.save',
