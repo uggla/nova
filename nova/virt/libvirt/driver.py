@@ -3934,7 +3934,7 @@ class LibvirtDriver(driver.ComputeDriver):
             self._create_guest_with_network(
                 context, xml, instance, network_info, block_device_info,
                 vifs_already_plugged=vifs_already_plugged,
-                external_events=external_events, share_info=share_info)
+                external_events=external_events)
 
             def _wait_for_reboot():
                 """Called at an interval until the VM is running again."""

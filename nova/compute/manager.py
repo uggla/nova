@@ -3909,7 +3909,7 @@ class ComputeManager(manager.Manager):
 
         share_info = objects.ShareMappingList.get_by_instance_uuid(
             context, instance.uuid)
-
+        share_info = [share for share in share_info]
         return share_info
 
     @wrap_exception()
