@@ -1510,7 +1510,7 @@ class LibvirtConfigGuestFilesys(LibvirtConfigGuestDevice):
         elif self.source_type == "block":
             dev.append(etree.Element("source", dev=self.source_dev))
         elif self.source_type == "mount" and self.driver_type == "virtiofs":
-            dev.append(etree.Element("driver", type = self.driver_type))
+            dev.append(etree.Element("driver", type=self.driver_type))
             dev.append(etree.Element("source", dir=self.source_dir))
         else:
             dev.append(etree.Element("source", dir=self.source_dir))
