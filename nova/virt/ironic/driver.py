@@ -1345,6 +1345,8 @@ class IronicDriver(virt_driver.ComputeDriver):
             encountered. Ignored by this driver.
         :param accel_info: List of accelerator request dicts. The exact
             data struct is doc'd in nova/virt/driver.py::spawn().
+        :param share_info: share mapping information used to mount Manila
+            shares on the compute and then on the instance using virtiofs.
         """
         LOG.debug('Reboot(type %s) called for instance',
                   reboot_type, instance=instance)
