@@ -11,6 +11,7 @@
 #    under the License.
 
 from abc import ABCMeta
+from abc import abstractmethod
 import importlib
 import logging
 from nova.db.main import api as db
@@ -150,18 +151,46 @@ class ShareMappingList(base.ObjectListBase, base.NovaObject):
             context, cls(context), ShareMapping, db_share_mappings)
 
 
+class ShareMappingLibvirtFactory(metaclass=ABCMeta):
+    @abstractmethod
+    def build(self, context, instance, share_mapping):
+        pass
+
+
+class ShareMappingLibvirtNFSBuilder(ShareMappingLibvirtFactory):
+    def build(self, context, instance, share_mapping):
+        sm = ShareMappingLibvirtNFS()
+        sm.convert(
+            context,
+            instance,
+            share_mapping
+        )
+        return sm
+
+
 class ShareMappingLibvirt(ShareMapping, metaclass=ABCMeta):
     @classmethod
     def from_share_mapping(cls, context, instance, share_mapping):
-        share_mapping_libvirt = cls(context)
-        share_mapping_libvirt.instance = instance
-        share_mapping_libvirt.uuid = share_mapping.uuid
-        share_mapping_libvirt.instance_uuid = share_mapping.instance_uuid
-        share_mapping_libvirt.share_id = share_mapping.share_id
-        share_mapping_libvirt.status = share_mapping.status
-        share_mapping_libvirt.tag = share_mapping.tag
-        share_mapping_libvirt.export_location = share_mapping.export_location
-        share_mapping_libvirt.share_proto = share_mapping.share_proto
+        if share_mapping.share_proto == 'NFS':
+            return ShareMappingLibvirtNFSBuilder().build(
+                    context,
+                    instance,
+                    share_mapping)
+        else:
+            raise exception.ShareProtocolUnknown(
+                    share_proto=share_mapping.share_proto)
+
+
+    def convert(self, context, instance, share_mapping):
+        self.context = context
+        self.instance = instance
+        self.uuid = share_mapping.uuid
+        self.instance_uuid = share_mapping.instance_uuid
+        self.share_id = share_mapping.share_id
+        self.status = share_mapping.status
+        self.tag = share_mapping.tag
+        self.export_location = share_mapping.export_location
+        self.share_proto = share_mapping.share_proto
         # Dynamically import the appropriate module and call the
         # required driver class based on share protocol.
         # e.g. for NFS, call the following class:
@@ -173,9 +202,7 @@ class ShareMappingLibvirt(ShareMapping, metaclass=ABCMeta):
             module_object, 'Libvirt' +
             share_mapping.share_proto +
             'VolumeDriver')
-        share_mapping_libvirt.libvirt_driver = class_object(instance.host)
-
-        return share_mapping_libvirt
+        self.libvirt_driver = class_object(instance.host)
 
 
 @base.NovaObjectRegistry.register

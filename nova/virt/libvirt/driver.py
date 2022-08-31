@@ -12288,21 +12288,23 @@ class LibvirtDriver(driver.ComputeDriver):
     def _convert_to_share_drv_list(self, context, instance, share_info):
         share_drv_info = []
 
-        def create_driver_protocol_object(context, instance, share):
-            if share.share_proto == 'NFS':
-                sml_nfs = objects.ShareMappingLibvirtNFS.from_share_mapping(
-                        context,
-                        instance,
-                        share)
-                return sml_nfs
-            else:
-                raise exception.ShareProtocolUnknown(
-                        share_proto=share.share_proto)
+        # def create_driver_protocol_object(context, instance, share):
+        #     if share.share_proto == 'NFS':
+        #         sml_nfs = objects.ShareMappingLibvirtNFS.from_share_mapping(
+        #                 context,
+        #                 instance,
+        #                 share)
+        #         return sml_nfs
+        #     else:
+        #         raise exception.ShareProtocolUnknown(
+        #                 share_proto=share.share_proto)
 
         if share_info:
             for share in share_info:
-                share_mapping_driver = create_driver_protocol_object(
-                        context, instance, share)
+                # share_mapping_driver = create_driver_protocol_object(
+                #         context, instance, share)
+                share_mapping_driver = object.ShareMappingLibvirt.from_share_mapping(
+                    context, instance, share)
                 share_drv_info.append(share_mapping_driver)
 
         return share_drv_info

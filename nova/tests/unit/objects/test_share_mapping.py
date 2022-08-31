@@ -263,7 +263,7 @@ class TestShareMappingLibvirtNFS(test_objects._LocalTest):
         instance = objects.Instance(self.context)
         instance.host = 'fake-host'
         share_mapping_libvirt_nfs = (
-            objects.ShareMappingLibvirtNFS.from_share_mapping(
+            sm.ShareMappingLibvirt.from_share_mapping(
                 self.context, instance, share_mapping)
         )
 
@@ -280,6 +280,7 @@ class TestShareMappingLibvirtNFS(test_objects._LocalTest):
         self.assertEqual(
             share_mapping_libvirt_nfs.share_proto, 'NFS')
 
+        __import__('pdb').set_trace()
         share_mapping_libvirt_nfs.attach('inactive')
         mock_upd.assert_called_once_with(
             self.context,
