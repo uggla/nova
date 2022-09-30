@@ -113,6 +113,23 @@ class ServerSharesController(wsgi.Controller):
             except exception.ShareNotFound:
                 return False
 
+        def notify(phase, exception=None):
+            try:
+                share_mapping
+                share_id = share_mapping.share_id
+            except NameError:
+                share_id = None
+
+            utils.notify_about_share_attach_detach(
+                cctxt,
+                instance,
+                instance.host,
+                action=fields.NotificationAction.SHARE_ATTACH,
+                phase=phase,
+                share_id=share_id,
+                exception=exception
+            )
+
         context = req.environ["nova.context"]
         # Get instance mapping to query the required cell database
         im = _get_instance_mapping(context, server_id)
@@ -154,40 +171,39 @@ class ServerSharesController(wsgi.Controller):
                     manila_share_data.export_location)
                 share_mapping.share_proto = manila_share_data.share_proto
 
-                utils.notify_about_share_attach_detach(
-                    cctxt,
-                    instance,
-                    instance.host,
-                    action=fields.NotificationAction.SHARE_ATTACH,
-                    phase=fields.NotificationPhase.START,
-                    share_id=share_mapping.share_id
-                )
+                notify(fields.NotificationPhase.START)
 
                 share_mapping.create()
                 self.compute_api.mount_share(cctxt, instance, share_mapping)
 
-                utils.notify_about_share_attach_detach(
-                    cctxt,
-                    instance,
-                    instance.host,
-                    action=fields.NotificationAction.SHARE_ATTACH,
-                    phase=fields.NotificationPhase.END,
-                    share_id=share_mapping.share_id
-                )
+                notify(fields.NotificationPhase.END)
+
                 view = self._view_builder._show_view(cctxt, share_mapping)
 
             except (exception.ShareNotFound) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPNotFound(explanation=e.format_message())
             except (exception.ShareMountError) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPInternalServerError(
                     explanation=e.filter_format_message())
             except (exception.UnsupportedManilaAPIVersion) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
             except (exception.ShareMappingAlreadyExists) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
             except (exception.ForbiddenSharesNotSupported) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPForbidden(explanation=e.format_message())
             except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPConflict(explanation=e.format_message())
 
         return view
