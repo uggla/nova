@@ -193,7 +193,8 @@ class ServerSharesTest(BaseTestCase):
                 instance.host,
                 action=fields.NotificationAction.SHARE_ATTACH,
                 phase=fields.NotificationPhase.START,
-                share_id=fake_db_share['share_id']
+                share_id=fake_db_share['share_id'],
+                exception=None
             ),
             mock.call(
                 mock.ANY,
@@ -201,7 +202,8 @@ class ServerSharesTest(BaseTestCase):
                 instance.host,
                 action=fields.NotificationAction.SHARE_ATTACH,
                 phase=fields.NotificationPhase.END,
-                share_id=fake_db_share['share_id']
+                share_id=fake_db_share['share_id'],
+                exception=None
             ),
         ])
 
