@@ -20,6 +20,7 @@ from nova.tests.functional.api import client
 from nova.tests.functional.notification_sample_tests \
     import notification_sample_base
 from nova.volume import cinder
+from oslo_concurrency import processutils
 
 
 class TestInstanceNotificationSampleWithMultipleCompute(
@@ -392,6 +393,7 @@ class TestInstanceNotificationSample(
             self._test_lock_unlock_instance,
             self._test_lock_unlock_instance_with_reason,
             self._test_share_attach_detach,
+            self._test_share_attach_error,
         ]
 
         for action in actions:
@@ -1860,6 +1862,108 @@ class TestInstanceNotificationSample(
                 'uuid': server['id'],
                 'state': 'active',
                 'power_state': 'running',
+            },
+            actual=self.notifier.versioned_notifications[1])
+
+    def _test_share_attach_error(self, server):
+
+        expected_shares = [
+            {'nova_object.name': 'SharePayload',
+             'nova_object.namespace': 'nova',
+             'nova_object.version': '1.0',
+             'nova_object.data': {
+                 'share_mapping_uuid': 'f7c1726d-7622-42b3-8b2c-4473239d60d1',
+                 'share_id': 'e8debdc0-447a-4376-a10a-4cd9122d7986',
+                 'status': 'inactive',
+                 'tag': 'e8debdc0-447a-4376-a10a-4cd9122d7986',
+                 'export_location': '10.0.0.50:/mnt/foo'}
+             }
+        ]
+
+        self.api.post_server_action(server['id'], {'os-stop': {}})
+        self._wait_for_state_change(server, expected_status='SHUTOFF')
+        self.notifier.reset()
+
+        # Return a constant share uuid
+        with mock.patch(
+            'nova.compute.manager.ComputeManager.mount_share',
+            side_effect=exception.ShareMountError(
+                share_id='8db0037b-e98f-4bde-ae71-f96a077c19a4',
+                server_id=server['id'],
+                reason=processutils.ProcessExecutionError(
+                    stdout='This is stdout',
+                    stderr='This is stderror',
+                    exit_code=1,
+                    cmd="mount"
+                )
+            )
+        ), mock.patch(
+                'oslo_utils.uuidutils.generate_uuid',
+                return_value='f7c1726d-7622-42b3-8b2c-4473239d60d1'
+        ):
+            # Attach share
+            self.assertRaises(
+                client.OpenStackApiException,
+                self._attach_share,
+                server,
+                'e8debdc0-447a-4376-a10a-4cd9122d7986',
+            )
+
+        self.assertEqual(3, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        self._verify_notification(
+            'instance-share_attach-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown'},
+            actual=self.notifier.versioned_notifications[0])
+        self._verify_notification(
+            'instance-share_attach-error',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'fault': self.ANY,
+                'shares': self.ANY,
+                'power_state': 'shutdown'},
+            actual=self.notifier.versioned_notifications[1])
+        self._verify_notification(
+            'instance-share_attach-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown',
+                'shares': expected_shares
+            },
+            actual=self.notifier.versioned_notifications[2])
+
+        # Restart server
+        self.notifier.reset()
+        self.api.post_server_action(server['id'], {'os-start': {}})
+        self._wait_for_state_change(server, expected_status='ACTIVE')
+        self.assertEqual(2, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        self._verify_notification(
+            'instance-power_on-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown',
+                'shares': self.ANY,
+            },
+            actual=self.notifier.versioned_notifications[0])
+        self._verify_notification(
+            'instance-power_on-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'active',
+                'power_state': 'running',
+                'shares': self.ANY,
             },
             actual=self.notifier.versioned_notifications[1])
 
