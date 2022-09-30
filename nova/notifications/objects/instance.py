@@ -198,7 +198,7 @@ class InstanceActionSharePayload(InstanceActionPayload):
     # Version 1.0: Initial version
     VERSION = '1.0'
     fields = {
-        'share_id': fields.UUIDField(),
+        'share_id': fields.UUIDField(nullable=True),
     }
 
     def __init__(self, context, instance, fault, share_id):
@@ -683,6 +683,7 @@ class InstanceActionVolumeNotification(base.NotificationBase):
 
 
 @base.notification_sample('instance-share_attach-start.json')
+@base.notification_sample('instance-share_attach-error.json')
 @base.notification_sample('instance-share_attach-end.json')
 @base.notification_sample('instance-share_detach-start.json')
 @base.notification_sample('instance-share_detach-end.json')
