@@ -398,7 +398,7 @@ notification_object_data = {
         '1.0-a73147b93b520ff0061865849d3dfa56',
     'InstanceActionResizePrepPayload': '1.3-2160d091527fdc368e906651123ff93f',
     'InstanceActionShareNotification': '1.0-a73147b93b520ff0061865849d3dfa56',
-    'InstanceActionSharePayload': '1.0-528727f539156837e5447cefd7ebf686',
+    'InstanceActionSharePayload': '1.0-e4700fb51f794954170d52a98e30c12d',
     'InstanceActionVolumeNotification': '1.0-a73147b93b520ff0061865849d3dfa56',
     'InstanceActionVolumePayload': '1.6-cd8d1d3555c5f5e8867cf9cd5a336806',
     'InstanceActionVolumeSwapNotification':
