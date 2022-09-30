@@ -20,6 +20,7 @@ from nova.tests.functional.api import client
 from nova.tests.functional.notification_sample_tests \
     import notification_sample_base
 from nova.volume import cinder
+from oslo_concurrency import processutils
 
 
 class TestInstanceNotificationSampleWithMultipleCompute(
@@ -392,6 +393,7 @@ class TestInstanceNotificationSample(
             self._test_lock_unlock_instance,
             self._test_lock_unlock_instance_with_reason,
             self._test_share_attach_detach,
+            self._test_share_attach_error,
         ]
 
         for action in actions:
@@ -1862,6 +1864,120 @@ class TestInstanceNotificationSample(
                 'power_state': 'running',
             },
             actual=self.notifier.versioned_notifications[1])
+
+    def _test_share_attach_error(self, server):
+
+        expected_shares = [
+            {'nova_object.name': 'SharePayload',
+             'nova_object.namespace': 'nova',
+             'nova_object.version': '1.0',
+             'nova_object.data': {
+                 'share_mapping_uuid': 'f7c1726d-7622-42b3-8b2c-4473239d60d1',
+                 'share_id': 'e8debdc0-447a-4376-a10a-4cd9122d7986',
+                 'status': 'attaching',
+                 'tag': 'e8debdc0-447a-4376-a10a-4cd9122d7986',
+                 'export_location': '10.0.0.50:/mnt/foo'}
+             }
+        ]
+
+        self.api.post_server_action(server['id'], {'os-stop': {}})
+        self._wait_for_state_change(server, expected_status='SHUTOFF')
+        self.notifier.reset()
+
+        # Return a constant share uuid
+        with mock.patch(
+            'nova.virt.fake.FakeDriver.mount_share',
+            side_effect=exception.ShareMountError(
+                share_id='8db0037b-e98f-4bde-ae71-f96a077c19a4',
+                server_id=server['id'],
+                reason=processutils.ProcessExecutionError(
+                    stdout='This is stdout',
+                    stderr='This is stderror',
+                    exit_code=1,
+                    cmd="mount"
+                )
+            )
+        ), mock.patch(
+                'oslo_utils.uuidutils.generate_uuid',
+                return_value='f7c1726d-7622-42b3-8b2c-4473239d60d1'
+        ):
+
+            self._attach_share(server, 'e8debdc0-447a-4376-a10a-4cd9122d7986')
+
+            self.assertEqual(2, len(self.notifier.versioned_notifications),
+                             self.notifier.versioned_notifications)
+            self._verify_notification(
+                'instance-share_attach-start',
+                replacements={
+                    'reservation_id': server['reservation_id'],
+                    'uuid': server['id'],
+                    'state': 'stopped',
+                    'power_state': 'shutdown'},
+                actual=self.notifier.versioned_notifications[0])
+            self._verify_notification(
+                'instance-share_attach-end',
+                replacements={
+                    'reservation_id': server['reservation_id'],
+                    'uuid': server['id'],
+                    'state': 'stopped',
+                    'power_state': 'shutdown',
+                    'shares': expected_shares
+                },
+                actual=self.notifier.versioned_notifications[1])
+
+            # Restart server
+            self.notifier.reset()
+            self.api.post_server_action(server['id'], {'os-start': {}})
+            self._wait_for_state_change(server, expected_status='ERROR')
+
+            # Notifications are not sorted in a deterministic way as it depends
+            # compute response time. So just check we have a notification
+            # which is an exception from compute.
+
+            self.assertTrue(
+                any(
+                    [
+                        item
+                        for item in self.notifier.versioned_notifications
+                        if item["event_type"] == "compute.exception"
+                    ]
+                )
+            )
+
+            # Detach share despite the share error
+            self.notifier.reset()
+            self._detach_share(
+                server, 'e8debdc0-447a-4376-a10a-4cd9122d7986')
+
+            expected_shares[0]["nova_object.data"]["status"] = "error"
+            self.assertEqual(2, len(self.notifier.versioned_notifications),
+                             self.notifier.versioned_notifications)
+            self._verify_notification(
+                'instance-share_detach-start',
+                replacements={
+                    'reservation_id': server['reservation_id'],
+                    'uuid': server['id'],
+                    'state': 'error',
+                    'shares': expected_shares,
+                    'power_state': 'shutdown'},
+                actual=self.notifier.versioned_notifications[0])
+            self._verify_notification(
+                'instance-share_detach-end',
+                replacements={
+                    'reservation_id': server['reservation_id'],
+                    'uuid': server['id'],
+                    'state': 'error',
+                    'power_state': 'shutdown',
+                },
+                actual=self.notifier.versioned_notifications[1])
+
+            # Reboot server
+            self.notifier.reset()
+
+            post = {'reboot': {'type': 'HARD'}}
+            self.api.post_server_action(server['id'], post)
+            self._wait_for_notification('instance.reboot.start')
+            self._wait_for_notification('instance.reboot.end')
 
     def _test_rescue_unrescue_server(self, server):
         # Both "rescue" and "unrescue" notification asserts are made here
