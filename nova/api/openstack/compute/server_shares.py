@@ -245,6 +245,22 @@ class ServerSharesController(wsgi.Controller):
     @wsgi.response(200)
     @wsgi.expected_errors((400, 401, 403, 404, 409, 500))
     def delete(self, req, server_id, id):
+        def notify(phase, exception=None):
+            try:
+                share_mapping
+                share_id = share_mapping.share_id
+            except NameError:
+                share_id = None
+
+            utils.notify_about_share_attach_detach(
+                cctxt,
+                instance,
+                instance.host,
+                action=fields.NotificationAction.SHARE_DETACH,
+                phase=phase,
+                share_id=share_id,
+                exception=exception
+            )
         context = req.environ["nova.context"]
         # Get instance mapping to query the required cell database
         im = _get_instance_mapping(context, server_id)
@@ -268,14 +284,7 @@ class ServerSharesController(wsgi.Controller):
                     id)
                 )
 
-                utils.notify_about_share_attach_detach(
-                    cctxt,
-                    instance,
-                    instance.host,
-                    action=fields.NotificationAction.SHARE_DETACH,
-                    phase=fields.NotificationPhase.START,
-                    share_id=share_mapping.share_id
-                )
+                notify(fields.NotificationPhase.START)
 
                 # Check if this share is used by other VMs
                 # If yes, then we should not deny this access
@@ -286,23 +295,26 @@ class ServerSharesController(wsgi.Controller):
 
                 share_mapping.detach()
 
-                utils.notify_about_share_attach_detach(
-                    cctxt,
-                    instance,
-                    instance.host,
-                    action=fields.NotificationAction.SHARE_DETACH,
-                    phase=fields.NotificationPhase.END,
-                    share_id=share_mapping.share_id
-                )
+                notify(fields.NotificationPhase.END)
 
             except (exception.ShareNotFound) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPNotFound(explanation=e.format_message())
             except (exception.ShareUmountError) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPInternalServerError(
                     explanation=e.filter_format_message())
             except (exception.UnsupportedManilaAPIVersion) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPBadRequest(explanation=e.format_message())
             except (exception.ForbiddenSharesNotSupported) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPForbidden(explanation=e.format_message())
             except (exception.ForbiddenSharesNotConfiguredCorrectly) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPConflict(explanation=e.format_message())
