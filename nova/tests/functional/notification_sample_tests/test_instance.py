@@ -393,7 +393,7 @@ class TestInstanceNotificationSample(
             self._test_lock_unlock_instance,
             self._test_lock_unlock_instance_with_reason,
             self._test_share_attach_detach,
-            self._test_share_attach_error,
+            self._test_share_attach_detach_error,
         ]
 
         for action in actions:
@@ -1840,7 +1840,7 @@ class TestInstanceNotificationSample(
                 'power_state': 'shutdown'},
             actual=self.notifier.versioned_notifications[1])
 
-        # Restart server
+        # Start server
         self.notifier.reset()
         self.api.post_server_action(server['id'], {'os-start': {}})
         self._wait_for_state_change(server, expected_status='ACTIVE')
@@ -1865,7 +1865,7 @@ class TestInstanceNotificationSample(
             },
             actual=self.notifier.versioned_notifications[1])
 
-    def _test_share_attach_error(self, server):
+    def _test_share_attach_detach_error(self, server):
 
         expected_shares = [
             {'nova_object.name': 'SharePayload',
@@ -1926,7 +1926,7 @@ class TestInstanceNotificationSample(
                 'uuid': server['id'],
                 'state': 'stopped',
                 'fault': self.ANY,
-                'shares': self.ANY,
+                'shares': expected_shares,
                 'power_state': 'shutdown'},
             actual=self.notifier.versioned_notifications[1])
         self._verify_notification(
@@ -1939,6 +1939,89 @@ class TestInstanceNotificationSample(
                 'shares': expected_shares
             },
             actual=self.notifier.versioned_notifications[2])
+
+        self.notifier.reset()
+        with mock.patch(
+            'nova.compute.manager.ComputeManager.umount_share',
+            side_effect=exception.ShareUmountError(
+                share_id='8db0037b-e98f-4bde-ae71-f96a077c19a4',
+                server_id=server['id'],
+                reason=processutils.ProcessExecutionError(
+                    stdout='This is stdout',
+                    stderr='This is stderror',
+                    exit_code=1,
+                    cmd="umount"
+                )
+            )
+        ), mock.patch(
+                'oslo_utils.uuidutils.generate_uuid',
+                return_value='f7c1726d-7622-42b3-8b2c-4473239d60d1'
+        ):
+            # Detach share with a failure
+            self.assertRaises(
+                client.OpenStackApiException,
+                self._detach_share,
+                server,
+                'e8debdc0-447a-4376-a10a-4cd9122d7986',
+            )
+
+        self.assertEqual(3, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        self._verify_notification(
+            'instance-share_detach-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'shares': expected_shares,
+                'power_state': 'shutdown'},
+            actual=self.notifier.versioned_notifications[0])
+        self._verify_notification(
+            'instance-share_detach-error',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'fault': self.ANY,
+                'shares': expected_shares,
+                'power_state': 'shutdown'},
+            actual=self.notifier.versioned_notifications[1])
+        self._verify_notification(
+            'instance-share_detach-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown',
+                'shares': expected_shares
+            },
+            actual=self.notifier.versioned_notifications[2])
+
+        # Detach share properly
+        self.notifier.reset()
+        self._detach_share(
+            server, 'e8debdc0-447a-4376-a10a-4cd9122d7986')
+
+        self.assertEqual(2, len(self.notifier.versioned_notifications),
+                         self.notifier.versioned_notifications)
+        self._verify_notification(
+            'instance-share_detach-start',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'shares': expected_shares,
+                'power_state': 'shutdown'},
+            actual=self.notifier.versioned_notifications[0])
+        self._verify_notification(
+            'instance-share_detach-end',
+            replacements={
+                'reservation_id': server['reservation_id'],
+                'uuid': server['id'],
+                'state': 'stopped',
+                'power_state': 'shutdown',
+            },
+            actual=self.notifier.versioned_notifications[1])
 
         # Restart server
         self.notifier.reset()
@@ -1953,7 +2036,6 @@ class TestInstanceNotificationSample(
                 'uuid': server['id'],
                 'state': 'stopped',
                 'power_state': 'shutdown',
-                'shares': self.ANY,
             },
             actual=self.notifier.versioned_notifications[0])
         self._verify_notification(
@@ -1963,7 +2045,6 @@ class TestInstanceNotificationSample(
                 'uuid': server['id'],
                 'state': 'active',
                 'power_state': 'running',
-                'shares': self.ANY,
             },
             actual=self.notifier.versioned_notifications[1])
 
