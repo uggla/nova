@@ -293,3 +293,26 @@ class ServerSharesTest(ServerSharesTestBase):
             self.context, server['id'])
         self.assertEqual(self.instance.vm_state, 'stopped')
         return (server, share_id)
+
+    def test_server_resume_with_shares(self):
+        with mock.patch(
+            'nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver.'
+            'disconnect_volume'
+        ), mock.patch(
+            'nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver.'
+            'connect_volume'
+        ):
+            server = self._create_server(networks='auto')
+            self._stop_server(server)
+
+            share_id = '4b021746-d0eb-4031-92aa-23c3bec182cd'
+            self._attach_share(server, share_id)
+            self._start_server(server)
+            self._suspend_server(server)
+            self._resume_server(server)
+
+            self._assert_filesystem_tag(self._get_xml(server), share_id)
+
+            self._assert_share_in_metadata(
+                self._get_metadata_url(server), share_id, share_id)
+            return (server, share_id)
