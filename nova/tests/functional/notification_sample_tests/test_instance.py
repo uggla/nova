@@ -393,7 +393,7 @@ class TestInstanceNotificationSample(
             self._test_lock_unlock_instance,
             self._test_lock_unlock_instance_with_reason,
             self._test_share_attach_detach,
-            self._test_share_attach_error,
+            self._test_share_attach_detach_error,
         ]
 
         for action in actions:
@@ -1844,7 +1844,7 @@ class TestInstanceNotificationSample(
             },
             actual=self.notifier.versioned_notifications[1])
 
-        # Restart server
+        # Start server
         self.notifier.reset()
         self.api.post_server_action(server['id'], {'os-start': {}})
         self._wait_for_state_change(server, expected_status='ACTIVE')
@@ -1869,7 +1869,7 @@ class TestInstanceNotificationSample(
             },
             actual=self.notifier.versioned_notifications[1])
 
-    def _test_share_attach_error(self, server):
+    def _test_share_attach_detach_error(self, server):
 
         expected_shares = [
             {
