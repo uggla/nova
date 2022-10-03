@@ -6980,6 +6980,7 @@ class ComputeManager(manager.Manager):
             context, instance.uuid)
         block_device_info = self._get_instance_block_device_info(
             context, instance, bdms=bdms)
+        share_info = self._get_share_info(context, instance)
 
         compute_utils.notify_about_instance_action(context, instance,
             self.host, action=fields.NotificationAction.RESUME,
@@ -6990,7 +6991,7 @@ class ComputeManager(manager.Manager):
         with self._error_out_instance_on_exception(context, instance,
              instance_state=instance.vm_state):
             self.driver.resume(context, instance, network_info,
-                               block_device_info)
+                               block_device_info, share_info)
 
         instance.power_state = self._get_power_state(instance)
 
