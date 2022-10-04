@@ -4782,13 +4782,18 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                           volume_id=volume_id),
                 ])
 
+    @mock.patch('nova.compute.manager.ComputeManager._get_share_info')
     @mock.patch('nova.compute.utils.notify_about_instance_rescue_action')
-    def _test_rescue(self, mock_notify, clean_shutdown=True):
+    def _test_rescue(self, mock_notify, mock_share_info, clean_shutdown=True):
         instance = fake_instance.fake_instance_obj(
             self.context, vm_state=vm_states.ACTIVE)
         fake_nw_info = network_model.NetworkInfo()
         rescue_image_meta = objects.ImageMeta.from_dict(
             {'id': uuids.image_id, 'name': uuids.image_name})
+
+        share_info = objects.ShareMappingList()
+        mock_share_info.return_value = share_info
+
         with test.nested(
             mock.patch.object(self.context, 'elevated',
                               return_value=self.context),
@@ -4848,7 +4853,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
 
             driver_rescue.assert_called_once_with(
                 self.context, instance, fake_nw_info, rescue_image_meta,
-                'verybadpass', mock.sentinel.block_device_info)
+                'verybadpass', mock.sentinel.block_device_info,
+                share_info=share_info)
 
             notify_usage_exists.assert_called_once_with(self.compute.notifier,
                 self.context, instance, 'fake-mini', current_period=True)
