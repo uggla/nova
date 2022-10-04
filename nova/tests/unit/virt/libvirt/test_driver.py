@@ -25769,16 +25769,18 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
         ) as (
             mock_create, mock_destroy, mock_get_guest_xml, mock_create_image,
             mock_get_existing_xml, mock_inst_path, mock_get_disk_info,
-            mock_image_get, mock_from_dict, mock_open,
+            mock_image_get, mock_from_dict, mock_open
         ):
             self.flags(virt_type='kvm', group='libvirt')
             mock_image_get.return_value = mock.sentinel.bdm_image_meta_dict
             mock_from_dict.return_value = mock.sentinel.bdm_image_meta
             mock_get_disk_info.return_value = disk_info
 
+            share_info = nova.objects.share_mapping.ShareMappingList()
+
             drvr.rescue(self.context, instance, network_info,
                         rescue_image_meta, mock.sentinel.rescue_password,
-                        block_device_info)
+                        block_device_info, share_info=share_info)
 
             # Assert that we fetch image metadata from Glance using the image
             # uuid stashed in the BDM and build an image_meta object using the
@@ -25798,7 +25800,7 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
             mock_get_guest_xml.assert_called_once_with(
                 self.context, instance, network_info, disk_info,
                 mock.sentinel.bdm_image_meta, rescue=mock.ANY, mdevs=mock.ANY,
-                block_device_info=block_device_info)
+                block_device_info=block_device_info, share_info=share_info)
 
     def test_rescue_stable_device_bfv(self):
         """Assert the disk layout when rescuing BFV instances"""
