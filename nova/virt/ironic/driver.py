@@ -2120,7 +2120,7 @@ class IronicDriver(virt_driver.ComputeDriver):
                     version=max_version)
 
     def rescue(self, context, instance, network_info, image_meta,
-               rescue_password, block_device_info):
+               rescue_password, block_device_info, share_info=None):
         """Rescue the specified instance.
 
         :param nova.context.RequestContext context:
@@ -2135,6 +2135,8 @@ class IronicDriver(virt_driver.ComputeDriver):
         :param rescue_password: new root password to set for rescue.
         :param dict block_device_info:
             The block device mapping of the instance.
+        :param nova.objects.share_mapping.ShareMapingList share_info
+            optional list of share_mapping
         :raise InstanceRescueFailure if rescue fails.
         """
         LOG.debug('Rescue called for instance', instance=instance)

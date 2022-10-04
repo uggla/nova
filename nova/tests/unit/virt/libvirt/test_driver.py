@@ -17677,14 +17677,19 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                               '_get_mdevs_from_guest_config',
                               return_value='fake_mdevs'),
             mock.patch.object(drvr, '_attach_mediated_devices'),
+            mock.patch(
+                'nova.objects.share_mapping.ShareMappingList.convert_to_driver'
+            )
         ) as (_get_existing_domain_xml, _create_guest_with_network,
               _attach_pci_devices, get_instance_pci_devs, get_image_metadata,
               mock_sync_time, mock_wait,
               _get_mdevs_from_guest_config,
-              _attach_mediated_devices):
+              _attach_mediated_devices, mock_convert):
             get_image_metadata.return_value = {'bar': 234}
 
             share_info = objects.share_mapping.ShareMappingList()
+            drv_share_info = nova.objects.share_mapping.ShareMappingDrvList()
+            mock_convert.return_value = drv_share_info
 
             drvr.resume(self.context, instance, network_info,
                         block_device_info, share_info=share_info)
@@ -17693,7 +17698,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                     instance,
                     network_info,
                     block_device_info,
-                    share_info
+                    drv_share_info
                 )]
             )
             _create_guest_with_network.assert_has_calls([
@@ -25680,19 +25685,26 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
             mock.patch('nova.image.glance.API.get'),
             mock.patch('nova.objects.image_meta.ImageMeta.from_dict'),
             mock.patch('builtins.open', new_callable=mock.mock_open),
+            mock.patch(
+                'nova.objects.share_mapping.ShareMappingList.convert_to_driver'
+            )
         ) as (
             mock_create, mock_destroy, mock_get_guest_xml, mock_create_image,
             mock_get_existing_xml, mock_inst_path, mock_get_disk_info,
-            mock_image_get, mock_from_dict, mock_open,
+            mock_image_get, mock_from_dict, mock_open, mock_convert
         ):
             self.flags(virt_type='kvm', group='libvirt')
             mock_image_get.return_value = mock.sentinel.bdm_image_meta_dict
             mock_from_dict.return_value = mock.sentinel.bdm_image_meta
             mock_get_disk_info.return_value = disk_info
 
+            share_info = nova.objects.share_mapping.ShareMappingList()
+            drv_share_info = nova.objects.share_mapping.ShareMappingDrvList()
+            mock_convert.return_value = drv_share_info
+
             drvr.rescue(self.context, instance, network_info,
                         rescue_image_meta, mock.sentinel.rescue_password,
-                        block_device_info)
+                        block_device_info, share_info=share_info)
 
             # Assert that we fetch image metadata from Glance using the image
             # uuid stashed in the BDM and build an image_meta object using the
@@ -25712,7 +25724,7 @@ class LibvirtDriverTestCase(test.NoDBTestCase, TraitsComparisonMixin):
             mock_get_guest_xml.assert_called_once_with(
                 self.context, instance, network_info, disk_info,
                 mock.sentinel.bdm_image_meta, rescue=mock.ANY, mdevs=mock.ANY,
-                block_device_info=block_device_info)
+                block_device_info=block_device_info, share_info=drv_share_info)
 
     def test_rescue_stable_device_bfv(self):
         """Assert the disk layout when rescuing BFV instances"""
