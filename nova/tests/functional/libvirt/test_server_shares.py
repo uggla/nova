@@ -311,3 +311,30 @@ class ServerSharesTest(ServerSharesTestBase):
             self._assert_share_in_metadata(
                 self._get_metadata_url(server), share_id, share_id)
             return (server, share_id)
+
+    def test_server_rescue_with_shares(self):
+        with mock.patch(
+            'nova.objects.share_mapping.ShareMappingLibvirtNFS.mount'
+        ), mock.patch(
+            'nova.objects.share_mapping.ShareMappingLibvirtNFS.umount'
+        ):
+            server = self._create_server(networks='auto')
+            self._stop_server(server)
+
+            share_id = '4b021746-d0eb-4031-92aa-23c3bec182cd'
+            self._attach_share(server, share_id)
+            self._start_server(server)
+            self._rescue_server(server)
+
+            self._assert_filesystem_tag(self._get_xml(server), share_id)
+
+            self._assert_share_in_metadata(
+                self._get_metadata_url(server), share_id, share_id)
+
+            self._unrescue_server(server)
+
+            self._assert_filesystem_tag(self._get_xml(server), share_id)
+
+            self._assert_share_in_metadata(
+                self._get_metadata_url(server), share_id, share_id)
+            return (server, share_id)
