@@ -4903,6 +4903,8 @@ class ComputeManager(manager.Manager):
         block_device_info = self._get_instance_block_device_info(
                                 context, instance, bdms=bdms)
 
+        share_info = self._get_share_info(context, instance)
+
         extra_usage_info = {'rescue_image_name':
                             self._get_image_name(rescue_image_meta)}
         self._notify_about_instance_usage(context, instance,
@@ -4917,7 +4919,7 @@ class ComputeManager(manager.Manager):
 
             self.driver.rescue(context, instance, network_info,
                                rescue_image_meta, admin_password,
-                               block_device_info)
+                               block_device_info, share_info=share_info)
         except Exception as e:
             LOG.exception("Error trying to Rescue Instance",
                           instance=instance)
