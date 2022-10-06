@@ -311,6 +311,12 @@ service_id_path_2_53_no_version:
   in: path
   required: true
   type: string
+share_id_path:
+  description: |
+    The UUID of the attached share.
+  in: path
+  required: true
+  type: string
 snapshot_id_path:
   description: |
     The UUID of the snapshot.
@@ -1231,6 +1237,18 @@ server_uuid_query:
 
     This parameter is only valid when specified by administrators.
     If non-admin users specify this parameter, it is ignored.
+  in: query
+  required: false
+  type: string
+share_id_query:
+  description: |
+    The UUID of the attached share.
+  in: query
+  required: true
+  type: string
+share_tag_query:
+  description: |
+    Custom device tag provided by the users to mount the share within the instance.
   in: query
   required: false
   type: string
@@ -6796,6 +6814,49 @@ set_metadata:
   in: body
   required: true
   type: object
+share_body:
+  description: |
+    A dictionary representation of a share attachment containing the fields
+    ``uuid``, ``serverId``, ``status``, ``tag`` and ``export_location``.
+  in: body
+  required: true
+  type: object
+share_export_location_body:
+  description: |
+    The export location used to attach the share to the underlying host.
+  in: body
+  required: false
+  type: string
+share_id_body:
+  description: |
+    The UUID of the attached share.
+  in: body
+  required: true
+  type: string
+share_status_body:
+  description: |
+    The status of the share.
+  in: body
+  required: true
+  type: string
+share_tag_body:
+  description: |
+    The device tag to be used by users to mount the share within the instance.
+  in: body
+  required: true
+  type: string
+share_uuid_body:
+  description: |
+    The UUID of the share attachement.
+  in: body
+  required: false
+  type: string
+shares_body:
+  description: |
+    The list of share attachments.
+  in: body
+  required: true
+  type: array
 shelve:
   description: |
     The action.
