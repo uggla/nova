@@ -855,7 +855,8 @@ class LibvirtDriver(driver.ComputeDriver):
             'supports_remote_managed_ports':
             self._host.supports_remote_managed_ports,
             'supports_virtio_fs': self._host.supports_virtio_fs,
-            'supports_mem_backing_file': self._host.supports_mem_backing_file
+            'supports_mem_backing_file': self._host.supports_mem_backing_file,
+            'supports_share_local_fs': self._host.supports_share_local_fs
         })
 
     def _register_all_undefined_instance_details(self) -> None:

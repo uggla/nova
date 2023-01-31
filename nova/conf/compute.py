@@ -1492,6 +1492,12 @@ Possible values:
 * A string with a list of named database columns, for example ``%(id)d``
   or ``%(uuid)s`` or ``%(hostname)s``.
 """),
+    cfg.StrOpt('share_local_fs',
+        default='',
+        help="""
+Location of root directory containing <DOMAIN_NAME> directories that will be
+mapped via virtiofs to the guest system.
+"""),
 ]
 
 

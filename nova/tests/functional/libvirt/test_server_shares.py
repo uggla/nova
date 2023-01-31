@@ -383,3 +383,21 @@ class ServerSharesTest(ServerSharesTestBase):
             self._assert_share_in_metadata(
                 self._get_metadata_url(server), share_id, share_id)
             return (server, share_id)
+
+
+class ServerLocalSharesTest(ServerSharesTestBase):
+    def setUp(self):
+        self.flags(share_local_fs='{ "/var" : "scaphandre" }')
+        super(ServerLocalSharesTest, self).setUp()
+
+    def test_server_share_local_fs(self):
+        """Verify that COMPUTE_SHARE_LOCAL_FS is enable"""
+        traits = self._get_provider_traits(
+            self.compute_rp_uuids[self.compute]
+        )
+        for trait in (
+            'COMPUTE_STORAGE_VIRTIO_FS',
+            'COMPUTE_MEM_BACKING_FILE',
+            'COMPUTE_SHARE_LOCAL_FS'
+        ):
+            self.assertIn(trait, traits)

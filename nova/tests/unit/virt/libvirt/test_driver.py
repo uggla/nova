@@ -876,6 +876,39 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         drvr.init_host("dummyhost")
         self.assertTrue(drvr.capabilities['supports_virtio_fs'])
 
+    @mock.patch.object(libvirt_driver.LibvirtDriver,
+                       '_register_all_undefined_instance_details',
+                       new=mock.Mock())
+    def test_driver_capabilities_share_local_fs(self):
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+        drvr.init_host("dummyhost")
+        self.assertFalse(drvr.capabilities['supports_share_local_fs'],
+                         'Driver capabilities for '
+                         '\'supports_share_local_fs\' '
+                         'is invalid when \'share_local_fs is not set\'')
+        self.flags(
+            share_local_fs= '{ "/var": "scaphandre" }')
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+        drvr.init_host("dummyhost")
+        self.assertTrue(drvr.capabilities['supports_share_local_fs'])
+        self.flags(
+            share_local_fs= '{ "/zorglub": "scaphandre" }')
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+        exp = self.assertRaises(
+            exception.InternalError, drvr.init_host,
+            "dummyhost")
+        self.assertEqual(
+            exp.message, "share_local_fs provided directory does not exist")
+        # Providing invalid JSON missing ':'
+        self.flags(
+            share_local_fs= '{ "/zorglub" "scaphandre" }')
+        drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
+        exp = self.assertRaises(
+            exception.InternalError, drvr.init_host,
+            "dummyhost")
+        self.assertEqual(
+            exp.message, "share_local_fs is not configured properly")
+
     def test_driver_capabilities_qcow2_with_rbd(self):
         self.flags(images_type='rbd', group='libvirt')
         self.flags(force_raw_images=False)
