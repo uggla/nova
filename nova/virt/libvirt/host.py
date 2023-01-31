@@ -1910,6 +1910,29 @@ class Host(object):
         return self.has_min_version(lv_ver=(7, 9, 0))
 
     @property
+    def supports_share_local_fs(self) -> bool:
+        """Determine if the host is configured to share local filesystem via
+        virtiofs.
+
+        Returns a boolean indicating the administrator has configured a local
+        filesystem to be shared between compute and guests.
+        """
+        if CONF.share_local_fs:
+            try:
+                conf = jsonutils.loads(CONF.share_local_fs)
+            except jsonutils.json.decoder.JSONDecodeError:
+                raise exception.InternalError(
+                'share_local_fs is not configured properly')
+
+            directory = list(conf.keys())[0]
+            if not os.path.exists(directory):
+                raise exception.InternalError(
+                    'share_local_fs '
+                    'provided directory does not exist')
+            return True
+        return False
+
+    @property
     def loaders(self) -> ty.List[dict]:
         """Retrieve details of loader configuration for the host.
 

@@ -159,6 +159,8 @@ CAPABILITY_TRAITS_MAP = {
         os_traits.COMPUTE_EPHEMERAL_ENCRYPTION_PLAIN,
     "supports_virtio_fs": os_traits.COMPUTE_STORAGE_VIRTIO_FS,
     "supports_mem_backing_file": os_traits.COMPUTE_MEM_BACKING_FILE,
+    "supports_share_local_fs":
+        os_traits.COMPUTE_SHARE_LOCAL_FS
 }
 
 
@@ -230,6 +232,7 @@ class ComputeDriver(object):
         "supports_remote_managed_ports": False,
         "supports_virtio_fs": False,
         "supports_mem_backing_file": False,
+        "supports_share_local_fs": False,
 
         # Ephemeral encryption support flags
         "supports_ephemeral_encryption": False,
