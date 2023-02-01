@@ -527,6 +527,17 @@ feature_flag_validators = [
             'description': 'model for vIOMMU',
         },
     ),
+    base.ExtraSpecValidator(
+        name='hw:share_local_fs',
+        description=(
+            'This can be used to share a local filesystem on the compute '
+            'to guest.'
+        ),
+        value={
+            'type': bool,
+            'description': 'Wheter to enable share local fs',
+        },
+    ),
 ]
 
 ephemeral_encryption_validators = [
