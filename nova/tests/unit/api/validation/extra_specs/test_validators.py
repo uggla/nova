@@ -128,6 +128,8 @@ class TestValidators(test.NoDBTestCase):
             ('hw:cpu_realtime', '0'),
             ('hw:mem_encryption', 'true'),
             ('hw:boot_menu', 'y'),
+            ('hw:share_local_fs', 'true'),
+            ('hw:share_local_fs', 'yes'),
         )
         for key, value in valid_specs:
             validators.validate(key, value)
@@ -137,6 +139,8 @@ class TestValidators(test.NoDBTestCase):
             ('hw:cpu_realtime', '00'),
             ('hw:mem_encryption', 'tru'),
             ('hw:boot_menu', 'yah'),
+            ('hw:share_local_fs', 'tru'),
+            ('hw:share_local_fs', 'yah'),
         )
         for key, value in invalid_specs:
             with testtools.ExpectedException(exception.ValidationError):

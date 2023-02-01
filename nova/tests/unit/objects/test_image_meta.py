@@ -554,3 +554,17 @@ class TestImageMetaProps(test.NoDBTestCase):
         # and is absent on older versions
         primitive = obj.obj_to_primitive('1.33')
         self.assertNotIn('hw_viommu_model', primitive['nova_object.data'])
+
+    def test_obj_make_compatible_share_local_fs(self):
+        """Check 'hw_share_local_fs' compatibility."""
+        obj = objects.ImageMetaProps(
+            hw_share_local_fs='yes',
+        )
+        primitive = obj.obj_to_primitive('1.35')
+        self.assertIn('hw_share_local_fs', primitive['nova_object.data'])
+        self.assertTrue(
+            primitive['nova_object.data']['hw_share_local_fs'])
+
+        # and is absent on older versions
+        primitive = obj.obj_to_primitive('1.34')
+        self.assertNotIn('hw_share_local_fs', primitive['nova_object.data'])
