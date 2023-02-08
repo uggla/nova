@@ -541,8 +541,9 @@ class ShareMappingProto(BaseNovaEnum):
 
     NFS = "NFS"
     CEPHFS = "CEPHFS"
+    LOCAL = "LOCAL"
 
-    ALL = (NFS, CEPHFS)
+    ALL = (NFS, CEPHFS, LOCAL)
 
 
 class TPMModel(BaseNovaEnum):
