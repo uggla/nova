@@ -430,6 +430,24 @@ def ephemeral_encryption_filter(
     return True
 
 
+@trace_request_filter
+def share_local_fs_filter(ctxt, request_spec):
+    """Allow only compute nodes with share_local_fs support.
+
+    This filter retains only nodes whose compute manager published the
+    COMPUTE_SHARE_LOCAL_FS trait.
+    """
+    trait_name = os_traits.COMPUTE_SHARE_LOCAL_FS
+    if (
+        request_spec.flavor.extra_specs.get('hw:share_local_fs') or
+            request_spec.image.properties.get('hw_share_local_fs')
+    ):
+        request_spec.root_required.add(trait_name)
+        LOG.debug('share_local_fs request filter added required '
+                  'trait %s', trait_name)
+    return True
+
+
 ALL_REQUEST_FILTERS = [
     require_tenant_aggregate,
     map_az_to_placement_aggregate,
@@ -441,6 +459,7 @@ ALL_REQUEST_FILTERS = [
     routed_networks_filter,
     remote_managed_ports_filter,
     ephemeral_encryption_filter,
+    share_local_fs_filter,
 ]
 
 
