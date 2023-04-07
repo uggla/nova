@@ -1076,6 +1076,17 @@ class ComputeManager(manager.Manager):
                          'host': instance.host})
             return
 
+        # If the compute has been rebooted and instance has shares, we need to
+        # mount the shares on the compute before attaching the shares to the
+        # instance.
+        # Note: If the shares are already mounted on the compute, this is
+        # handled by the driver that will not attempt to mount them again.
+        share_info = self._get_share_info(context, instance)
+        try:
+            self._mount_all_shares(context, instance, share_info)
+        except exception.ShareMountError as e:
+            LOG.error(e.message)
+
         # Instances that are shut down, or in an error state can not be
         # initialized and are not attempted to be recovered. The exception
         # to this are instances that are in RESIZE_MIGRATING or DELETING,
