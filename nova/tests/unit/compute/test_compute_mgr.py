@@ -6658,8 +6658,11 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_delete_instance.assert_called_once_with(
             self.context, instance, bdms)
 
+    @mock.patch('nova.compute.manager.ComputeManager._get_share_info',
+                return_value=[])
     @mock.patch('nova.context.RequestContext.elevated')
-    def test_terminate_instance_no_network_info(self, mock_elevated):
+    def test_terminate_instance_no_network_info(
+            self, mock_elevated, mock_share):
         # Tests that we refresh the network info if it was empty
         instance = fake_instance.fake_instance_obj(
             self.context, vm_state=vm_states.ACTIVE)

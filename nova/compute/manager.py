@@ -3142,6 +3142,7 @@ class ComputeManager(manager.Manager):
                     phase=fields.NotificationPhase.START, bdms=bdms)
 
         network_info = instance.get_network_info()
+        share_info = self._get_share_info(context, instance)
 
         # NOTE(arnaudmorin) to avoid nova destroying the instance without
         # unplugging the interface, refresh network_info if it is empty.
@@ -3180,6 +3181,13 @@ class ComputeManager(manager.Manager):
             self._try_deallocate_network(context, instance, requested_networks)
 
         timer.restart()
+
+        if share_info:
+            for share in share_info:
+                self._umount_share(context, instance, share)
+                self.deny_share(context, instance, share)
+                share.delete()
+
         connector = None
         for bdm in vol_bdms:
             try:
