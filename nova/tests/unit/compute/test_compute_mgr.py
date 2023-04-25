@@ -1737,6 +1737,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                               self.compute._get_power_state,
                               instance)
 
+    @mock.patch.object(manager.ComputeManager, '_mount_all_shares')
+    @mock.patch.object(manager.ComputeManager, '_get_share_info')
     @mock.patch.object(manager.ComputeManager, '_get_power_state')
     @mock.patch.object(fake_driver.FakeDriver, 'plug_vifs')
     @mock.patch.object(fake_driver.FakeDriver, 'resume_state_on_host_boot')
@@ -1744,7 +1746,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                        '_get_instance_block_device_info')
     @mock.patch.object(manager.ComputeManager, '_set_instance_obj_error_state')
     def test_init_instance_failed_resume_sets_error(self, mock_set_inst,
-                mock_get_inst, mock_resume, mock_plug, mock_get_power):
+        mock_get_inst, mock_resume, mock_plug, mock_get_power,
+        mock_get_share_info, mock_mount):
         instance = fake_instance.fake_instance_obj(
                 self.context,
                 uuid=uuids.instance,
@@ -1761,11 +1764,9 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_get_inst.return_value = 'fake-bdm'
         mock_resume.side_effect = test.TestingException
         share_info = objects.ShareMappingList()
-        with mock.patch(
-            "nova.compute.manager.ComputeManager._get_share_info",
-            return_value=share_info
-        ):
-            self.compute._init_instance('fake-context', instance)
+        mock_get_share_info.return_value = share_info
+
+        self.compute._init_instance('fake-context', instance)
         mock_get_power.assert_has_calls([mock.call(instance),
                                          mock.call(instance)])
         mock_plug.assert_called_once_with(instance, mock.ANY)
@@ -1773,6 +1774,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_resume.assert_called_once_with(mock.ANY, instance, mock.ANY,
                                             share_info, 'fake-bdm')
         mock_set_inst.assert_called_once_with(instance)
+        mock_get_share_info.assert_called_once_with(mock.ANY, instance)
+        mock_mount.assert_called_once_with(mock.ANY, instance, share_info)
 
     @mock.patch.object(objects.BlockDeviceMapping, 'destroy')
     @mock.patch.object(objects.BlockDeviceMappingList, 'get_by_instance_uuid')
@@ -2872,8 +2875,9 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         self.compute._umount_share(self.context, instance, share_mapping)
         mock_drv.assert_called_once_with(self.context, instance, share_mapping)
 
-    @mock.patch('nova.compute.manager.ComputeManager._get_share_info',
-                return_value=[])
+    @mock.patch('nova.compute.manager.ComputeManager._umount_share')
+    @mock.patch('nova.compute.manager.ComputeManager.deny_share')
+    @mock.patch('nova.compute.manager.ComputeManager._get_share_info')
     @mock.patch('nova.context.RequestContext.elevated')
     @mock.patch('nova.objects.Instance.get_network_info')
     @mock.patch(
@@ -2893,8 +2897,11 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_nw_info,
         mock_elevated,
         mock_share,
+        mock_deny,
+        mock_umount,
     ):
         mock_elevated.return_value = self.context
+        mock_share.return_value = objects.ShareMappingList()
         instance = fake_instance.fake_instance_obj(
                 self.context,
                 uuid=uuids.instance,
@@ -2908,6 +2915,64 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                       action='shutdown', phase='start', bdms=bdms),
             mock.call(self.context, instance, 'fake-mini',
                       action='shutdown', phase='end', bdms=bdms)])
+        mock_deny.assert_not_called()
+        mock_umount.assert_not_called()
+
+    @mock.patch('nova.objects.share_mapping.ShareMapping.deactivate')
+    @mock.patch('nova.compute.manager.ComputeManager._umount_share')
+    @mock.patch('nova.compute.manager.ComputeManager.deny_share')
+    @mock.patch('nova.compute.manager.ComputeManager._get_share_info')
+    @mock.patch('nova.context.RequestContext.elevated')
+    @mock.patch('nova.objects.Instance.get_network_info')
+    @mock.patch(
+        'nova.compute.manager.ComputeManager._get_instance_block_device_info')
+    @mock.patch('nova.virt.driver.ComputeDriver.destroy')
+    @mock.patch('nova.virt.fake.FakeDriver.get_volume_connector')
+    @mock.patch('nova.compute.utils.notify_about_instance_action')
+    @mock.patch(
+        'nova.compute.manager.ComputeManager._notify_about_instance_usage')
+    def test_shutdown_instance_versioned_notifications_with_share(
+        self,
+        mock_notify_unversioned,
+        mock_notify,
+        mock_connector,
+        mock_destroy,
+        mock_blk_device_info,
+        mock_nw_info,
+        mock_elevated,
+        mock_share,
+        mock_deny,
+        mock_umount,
+        mock_deactivate,
+    ):
+        mock_elevated.return_value = self.context
+        share_info = self.fake_share_info()
+        mock_share.return_value = share_info
+        instance = fake_instance.fake_instance_obj(
+                self.context,
+                uuid=uuids.instance,
+                vm_state=vm_states.ERROR,
+                task_state=task_states.DELETING)
+        bdms = [mock.Mock(id=1, is_volume=True)]
+        self.compute._shutdown_instance(self.context, instance, bdms,
+                        notify=True, try_deallocate_networks=False)
+        mock_notify.assert_has_calls([
+            mock.call(self.context, instance, 'fake-mini',
+                      action='shutdown', phase='start', bdms=bdms),
+            mock.call(self.context, instance, 'fake-mini',
+                      action='shutdown', phase='end', bdms=bdms)])
+        mock_deny.assert_has_calls([
+            mock.call(self.context, instance, share_info[0]),
+            mock.call(self.context, instance, share_info[1])
+        ])
+        mock_umount.assert_has_calls([
+            mock.call(self.context, instance, share_info[0]),
+            mock.call(self.context, instance, share_info[1])
+        ])
+        mock_deactivate.assert_has_calls([
+            mock.call(),
+            mock.call()
+        ])
 
     @mock.patch('nova.compute.manager.ComputeManager._get_share_info',
                 return_value=[])
@@ -7040,8 +7105,11 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_delete_instance.assert_called_once_with(
             self.context, instance, bdms)
 
+    @mock.patch('nova.compute.manager.ComputeManager._get_share_info',
+                return_value=[])
     @mock.patch('nova.context.RequestContext.elevated')
-    def test_terminate_instance_no_network_info(self, mock_elevated):
+    def test_terminate_instance_no_network_info(
+            self, mock_elevated, mock_share):
         # Tests that we refresh the network info if it was empty
         instance = fake_instance.fake_instance_obj(
             self.context, vm_state=vm_states.ACTIVE)
