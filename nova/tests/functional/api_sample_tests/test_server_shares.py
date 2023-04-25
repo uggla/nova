@@ -325,6 +325,36 @@ class ServerSharesJsonTest(ServerSharesBase):
             mock_drv.call_args.args[2], objects.share_mapping.ShareMapping)
         self.assertEqual(mock_drv.call_args.args[2].share_id, subs["shareId"])
 
+    @mock.patch('nova.objects.share_mapping.ShareMapping.delete')
+    @mock.patch('nova.virt.fake.FakeDriver.umount_share')
+    def test_server_shares_delete_instance(self, mock_drv, mock_delete):
+        """Verify we can delete an instance and its associated share is
+        deleted as well.
+        """
+        uuid = self._post_server_shares()
+        subs = self._get_create_subs()
+
+        # Check share is created
+        response = self._do_get(
+            "servers/%s/shares/%s" % (uuid, subs["shareId"])
+        )
+        self._verify_response("server-shares-show-resp", subs, response, 200)
+
+        # Delete the instance
+        response = self._do_delete(
+            "servers/%s" % (uuid)
+        )
+        self.assertEqual(204, response.status_code)
+        mock_drv.assert_called_once()
+        self.assertIsInstance(
+            mock_drv.call_args.args[1], objects.instance.Instance)
+        self.assertEqual(mock_drv.call_args.args[1].uuid, uuid)
+        self.assertIsInstance(
+            mock_drv.call_args.args[2], objects.share_mapping.ShareMapping)
+        self.assertEqual(mock_drv.call_args.args[2].share_id, subs["shareId"])
+
+        mock_delete.assert_called_once()
+
     @mock.patch('nova.virt.fake.FakeDriver.umount_share')
     def test_server_shares_delete_fails_umount_error(self, mock_drv):
         """Verify we have an error if we fail to umount the share
