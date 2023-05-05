@@ -122,6 +122,17 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         share_mapping.share_proto = 'NFS'
         return share_mapping
 
+    def get_fake_share_access(self):
+        access = {
+            "access_level": "rw",
+            "state": "active",
+            "id": "507bf114-36f2-4f56-8cf4-857985ca87c1",
+            "access_type": "ip",
+            "access_to": "192.168.0.1",
+            "access_key": None,
+        }
+        return nova.share.manila.Access().from_manila_access(access)
+
     def fake_share_info(self):
         share_mapping = {}
         share_mapping['id'] = 1
@@ -2282,7 +2293,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
 
     @mock.patch('nova.virt.fake.FakeDriver.mount_share')
     @mock.patch('nova.share.manila.API.allow')
-    @mock.patch('nova.share.manila.API.get_access', return_value=None)
+    @mock.patch('nova.share.manila.API.get_access')
     def test_mount_share(self, mock_get_access, mock_allow, mock_drv):
         self.flags(shutdown_retry_interval=20, group='compute')
         instance = fake_instance.fake_instance_obj(
@@ -2292,6 +2303,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                 task_state=task_states.POWERING_OFF)
         compute_ip = CONF.my_block_storage_ip
         share_mapping = self.get_fake_share_mapping()
+        mock_get_access.side_effect = [None, self.get_fake_share_access()]
         self.compute.mount_share(self.context, instance, share_mapping)
         mock_get_access.assert_called_with(
             self.context, share_mapping.share_id, 'ip', compute_ip)

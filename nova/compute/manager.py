@@ -4494,14 +4494,15 @@ class ComputeManager(manager.Manager):
         @utils.synchronized(share_mapping.share_id)
         def _mount_share(context, instance, share_mapping):
             compute_ip = CONF.my_block_storage_ip
-            max_retries = 20
+            max_retries = CONF.manila.action_timeout
+            attempt_count = 0
 
             def check_access():
                 access = self.manila_api.get_access(
-                context,
-                share_mapping.share_id,
-                'ip',
-                compute_ip
+                    context,
+                    share_mapping.share_id,
+                    'ip',
+                    compute_ip
                 )
 
                 if access is not None and access.state == 'active':
@@ -4517,17 +4518,25 @@ class ComputeManager(manager.Manager):
                     'rw'
                 )
 
-            # Ensure the share policy is updated, this will avoid
-            # a race condition mounting the share if it is not the case.
-            for _i in range(max_retries):
-                if check_access():
-                    LOG.debug('Allow policy set on share %s ',
-                              share_mapping.share_id)
-                    break
-                else:
-                    LOG.debug('Waiting policy to be set on share %s ',
-                              share_mapping.share_id)
-                    time.sleep(0.5)
+                # Ensure the share policy is updated, this will avoid
+                # a race condition mounting the share if it is not the case.
+                while attempt_count < max_retries:
+                    if check_access():
+                        LOG.debug('Allow policy set on share %s ',
+                                  share_mapping.share_id)
+                        break
+                    else:
+                        LOG.debug('Waiting policy to be set on share %s ',
+                                  share_mapping.share_id)
+                        time.sleep(1)
+                        attempt_count += 1
+
+                if attempt_count >= max_retries:
+                    raise exception.ShareAccessGrantError(
+                        share_id=share_mapping.share_id,
+                        reason="Failed to set allow policy on share, "
+                        "too many retries",
+                    )
 
             self.driver.mount_share(context, instance, share_mapping)
 
