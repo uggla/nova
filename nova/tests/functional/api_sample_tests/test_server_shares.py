@@ -132,8 +132,7 @@ class ServerSharesJsonTest(ServerSharesBase):
         self.assertEqual(409, response.status_code)
         self.assertIn('while it is in vm_state active', response.text)
 
-    def test_server_shares_create_fails_incorrect_configuration(
-            self):
+    def test_server_shares_create_fails_incorrect_configuration(self):
         """Verify we cannot create a share we don't have the
         appropriate configuration.
         """
@@ -151,8 +150,22 @@ class ServerSharesJsonTest(ServerSharesBase):
                 'instance are not configured correctly.', response.text
             )
 
-    def test_server_shares_create_with_alternative_flavor(
-            self):
+    def test_server_shares_create_fails_cannot_allow_policy(self):
+        """Verify we raise an exception if we get a timeout to apply policy"""
+        uuid = self.create_server_ok()
+        subs = self._get_create_subs()
+        self.manila_fixture.mock_get_access.return_value = None
+        self.manila_fixture.mock_get_access.side_effect = None
+        response = self._do_post(
+            "servers/%s/shares" % uuid, "server-shares-create-req", subs
+        )
+        self.assertEqual(500, response.status_code)
+        self.assertIn(
+            "Share access could not be granted to share",
+            response.text,
+        )
+
+    def test_server_shares_create_with_alternative_flavor(self):
         """Verify we can create a share with the proper flavor.
         """
         with mock.patch.dict(self.compute.driver.capabilities,
@@ -441,6 +454,26 @@ class ServerSharesJsonTest(ServerSharesBase):
         self.assertEqual(404, response.status_code)
         self.assertIn(
             "could not be found",
+            response.text
+        )
+
+    def test_server_shares_delete_fails_cannot_deny_policy(self):
+        """Verify we raise an exception if we cannot deny the policy.
+        """
+        uuid = self._post_server_shares()
+        subs = self._get_create_subs()
+        self.manila_fixture.mock_deny.return_value = None
+        self.manila_fixture.mock_deny.side_effect = (
+            exception.ShareAccessRemovalError(
+                share_id=subs["shareId"], reason="Resource could not be found."
+            )
+        )
+        response = self._do_delete(
+            "servers/%s/shares/%s" % (uuid, subs["shareId"])
+        )
+        self.assertEqual(500, response.status_code)
+        self.assertIn(
+            "Share access could not be removed",
             response.text
         )
 

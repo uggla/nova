@@ -189,6 +189,11 @@ class ServerSharesController(wsgi.Controller):
                 notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPInternalServerError(
                     explanation=e.filter_format_message())
+            except (exception.ShareAccessGrantError) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
+                raise webob.exc.HTTPInternalServerError(
+                    explanation=e.format_message())
             except (exception.UnsupportedManilaAPIVersion) as e:
                 notify(fields.NotificationPhase.ERROR, e)
                 notify(fields.NotificationPhase.END)
@@ -302,6 +307,11 @@ class ServerSharesController(wsgi.Controller):
                 notify(fields.NotificationPhase.END)
                 raise webob.exc.HTTPInternalServerError(
                     explanation=e.filter_format_message())
+            except (exception.ShareAccessRemovalError) as e:
+                notify(fields.NotificationPhase.ERROR, e)
+                notify(fields.NotificationPhase.END)
+                raise webob.exc.HTTPInternalServerError(
+                    explanation=e.format_message())
             except (exception.UnsupportedManilaAPIVersion) as e:
                 notify(fields.NotificationPhase.ERROR, e)
                 notify(fields.NotificationPhase.END)
