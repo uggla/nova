@@ -11,6 +11,7 @@
 # under the License.
 
 import fixtures
+import nova
 from oslo_config import cfg
 from oslo_log import log as logging
 
@@ -26,6 +27,9 @@ class ManilaFixture(fixtures.Fixture):
 
     def setUp(self):
         super().setUp()
+        # Set the default timeout to 2 seconds to speed up tests
+        CONF.set_override('action_timeout', 2, 'manila')
+        self.call_count = {"fake_get_access": 0}
         self.mock_get = self.useFixture(fixtures.MockPatch(
             'nova.share.manila.API.get',
             side_effect=self.fake_get)).mock
@@ -60,7 +64,21 @@ class ManilaFixture(fixtures.Fixture):
         return share
 
     def fake_get_access(self, context, share_id, access_type, access_to,):
-        return None
+        if self.call_count.get("fake_get_access") == 0:
+            # First call, return None
+            self.call_count["fake_get_access"] += 1
+            return None
+        else:
+            # Second call, return the desired Access object
+            access = {
+                "access_level": "rw",
+                "state": "active",
+                "id": "507bf114-36f2-4f56-8cf4-857985ca87c1",
+                "access_type": "ip",
+                "access_to": "192.168.0.1",
+                "access_key": None,
+            }
+            return nova.share.manila.Access().from_manila_access(access)
 
     def fake_allow(self, context, share_id, access_type, access_to,
             access_level, microversion=None):

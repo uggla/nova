@@ -73,6 +73,16 @@ Possible values:
 
 * Any integer value. 0 means connection is attempted only once
 """),
+    cfg.IntOpt('action_timeout',
+               default=30,
+               help="""
+Maximum amount of time that a function or method should wait for a response
+from the Manila service before timing out.
+
+Possible values:
+
+* A positive integer or 0 (default value is 60).
+"""),
     cfg.BoolOpt('debug',
         default=False,
         help="""
