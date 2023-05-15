@@ -18,6 +18,11 @@ from nova.objects import fields
 
 LOG = logging.getLogger(__name__)
 
+EPHEMERAL_FIELDS = [
+    "access_to",
+    "access_key",
+]
+
 
 @base.NovaObjectRegistry.register
 class ShareMapping(base.NovaTimestampObject, base.NovaObject):
@@ -32,13 +37,17 @@ class ShareMapping(base.NovaTimestampObject, base.NovaObject):
         'status': fields.ShareMappingStatusField(),
         'tag': fields.StringField(nullable=False),
         'export_location': fields.StringField(nullable=False),
-        'share_proto': fields.ShareMappingProtoField()
+        'share_proto': fields.ShareMappingProtoField(),
+        # Next fields are ephemeral
+        'access_to': fields.StringField(nullable=True),
+        'access_key': fields.StringField(nullable=True),
     }
 
     @staticmethod
     def _from_db_object(context, share_mapping, db_share_mapping):
         for field in share_mapping.fields:
-            setattr(share_mapping, field, db_share_mapping[field])
+            if field not in EPHEMERAL_FIELDS:
+                setattr(share_mapping, field, db_share_mapping[field])
         share_mapping._context = context
         share_mapping.obj_reset_changes()
         return share_mapping

@@ -4665,8 +4665,10 @@ class ComputeManager(manager.Manager):
                     )
 
             try:
-                access_type = 'ip'
-                access_to = CONF.my_block_storage_ip
+                (
+                    access_type,
+                    access_to
+                ) = self._set_access_according_to_protocol(share_mapping)
 
                 if not _check_access():
                     _apply_policy()
@@ -4722,8 +4724,10 @@ class ComputeManager(manager.Manager):
                     context, share_mapping.share_id
                 )
 
-                access_type = 'ip'
-                access_to = CONF.my_block_storage_ip
+                (
+                    access_type,
+                    access_to,
+                ) = self._set_access_according_to_protocol(share_mapping)
 
                 if not still_used:
                     # self.manila_api.unlock(share_mapping.share_id)
@@ -4781,8 +4785,10 @@ class ComputeManager(manager.Manager):
                 share_mapping.access_key = access.access_key
 
             try:
-                access_type = 'ip'
-                access_to = CONF.my_block_storage_ip
+                (
+                    access_type,
+                    access_to
+                ) = self._set_access_according_to_protocol(share_mapping)
 
                 if share_mapping.share_proto == (
                     fields.ShareMappingProto.CEPHFS):
@@ -4844,6 +4850,19 @@ class ComputeManager(manager.Manager):
         self._set_instance_obj_error_state(
             instance, clean_task_state=True
         )
+
+    def _set_access_according_to_protocol(self, share_mapping):
+        if share_mapping.share_proto == fields.ShareMappingProto.NFS:
+            access_type = 'ip'
+            access_to = CONF.my_block_storage_ip
+        elif share_mapping.share_proto == fields.ShareMappingProto.CEPHFS:
+            access_type = 'cephx'
+            access_to = 'nova'
+        else:
+            raise exception.ShareProtocolUnknown(
+                share_proto=share_mapping.share_proto
+            )
+        return (access_type, access_to)
 
     @wrap_instance_fault
     def _rotate_backups(self, context, instance, backup_type, rotation):
