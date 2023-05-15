@@ -45,7 +45,7 @@ class ServerSharesTestBase(base.ServersTestBase):
         super(ServerSharesTestBase, self).setUp()
 
         self.context = nova_context.get_admin_context()
-        self.useFixture(nova_fixtures.ManilaFixture())
+        self.manila_fixture = self.useFixture(nova_fixtures.ManilaFixture())
         self.flags(ram_allocation_ratio=1.0)
         self.flags(file_backed_memory=8192, group='libvirt')
         self.compute = self.start_compute(
@@ -119,6 +119,44 @@ class ServerSharesTest(ServerSharesTestBase):
             'nova.virt.libvirt.volume.nfs.LibvirtNFSVolumeDriver.'
             'connect_volume'
         ):
+            traits = self._get_provider_traits(
+                self.compute_rp_uuids[self.compute])
+            for trait in (
+                    'COMPUTE_STORAGE_VIRTIO_FS', 'COMPUTE_MEM_BACKING_FILE'):
+                self.assertIn(trait, traits)
+            server = self._create_server(networks='auto')
+            self._stop_server(server)
+
+            share_id = '4b021746-d0eb-4031-92aa-23c3bec182cd'
+            self._attach_share(server, share_id)
+            self._start_server(server)
+
+            # tag is the filesystem target directory.
+            # if post /server/{server_id}/share was called without a specific
+            # tag then the tag is the share id.
+            self._assert_filesystem_tag(self._get_xml(server), share_id)
+
+            self._assert_share_in_metadata(
+                self._get_metadata_url(server), share_id, share_id)
+            return (server, share_id)
+
+    def test_server_cephfs_share_metadata(self):
+        """Verify that cephfs share metadata are available"""
+        with mock.patch(
+            'nova.virt.libvirt.volume.cephfs.LibvirtCEPHFSVolumeDriver.'
+            'disconnect_volume'
+        ), mock.patch(
+            'nova.virt.libvirt.volume.cephfs.LibvirtCEPHFSVolumeDriver.'
+            'connect_volume'
+        ):
+            # update the mock to call the cephfs fake values
+            self.manila_fixture.mock_get.side_effect = (
+                self.manila_fixture.fake_get_cephfs
+            )
+            self.manila_fixture.mock_get_access.side_effect = (
+                self.manila_fixture.fake_get_access_cephfs
+            )
+
             traits = self._get_provider_traits(
                 self.compute_rp_uuids[self.compute])
             for trait in (

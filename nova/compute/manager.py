@@ -4493,28 +4493,33 @@ class ComputeManager(manager.Manager):
 
         @utils.synchronized(share_mapping.share_id)
         def _mount_share(context, instance, share_mapping):
-            compute_ip = CONF.my_block_storage_ip
-            max_retries = CONF.manila.action_timeout
-            attempt_count = 0
-
-            def check_access():
+            def get_access():
                 access = self.manila_api.get_access(
                     context,
                     share_mapping.share_id,
-                    'ip',
-                    compute_ip
+                    access_type,
+                    access_to
                 )
+                return access
 
+            def check_access():
+                access = get_access()
                 if access is not None and access.state == 'active':
                     return True
                 return False
+
+            max_retries = CONF.manila.action_timeout
+            attempt_count = 0
+            access_type, access_to = self._set_access_according_to_protocol(
+                context, share_mapping
+            )
 
             if not check_access():
                 self.manila_api.allow(
                     context,
                     share_mapping.share_id,
-                    'ip',
-                    compute_ip,
+                    access_type,
+                    access_to,
                     'rw'
                 )
 
@@ -4538,6 +4543,12 @@ class ComputeManager(manager.Manager):
                         "too many retries",
                     )
 
+            if share_mapping.share_proto == fields.ShareMappingProto.CEPHFS:
+                # Enhance the share_mapping object by adding Ceph credential
+                # information
+                access = get_access()
+                share_mapping.access_to = access_to
+                share_mapping.access_key = access.access_key
             self.driver.mount_share(context, instance, share_mapping)
 
         _mount_share(context, instance, share_mapping)
@@ -4548,20 +4559,35 @@ class ComputeManager(manager.Manager):
 
         @utils.synchronized(share_mapping.share_id)
         def _umount_share(context, instance, share_mapping):
-            compute_ip = CONF.my_block_storage_ip
-
             still_used = self.driver.umount_share(
                 context, instance, share_mapping)
+
+            access_type, access_to = self._set_access_according_to_protocol(
+                context, share_mapping
+            )
 
             if not still_used:
                 self.manila_api.deny(
                     context,
                     share_mapping.share_id,
-                    'ip',
-                    compute_ip
+                    access_type,
+                    access_to,
                 )
 
         _umount_share(context, instance, share_mapping)
+
+    def _set_access_according_to_protocol(self, context, share_mapping):
+        if share_mapping.share_proto == fields.ShareMappingProto.NFS:
+            access_type = 'ip'
+            access_to = CONF.my_block_storage_ip
+        elif share_mapping.share_proto == fields.ShareMappingProto.CEPHFS:
+            access_type = 'cephx'
+            access_to = 'nova'
+        else:
+            raise exception.ShareProtocolUnknown(
+                share_proto=share_mapping.share_proto
+            )
+        return (access_type, access_to)
 
     @wrap_instance_fault
     def _rotate_backups(self, context, instance, backup_type, rotation):

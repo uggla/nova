@@ -1135,7 +1135,7 @@ object_data = {
     'Selection': '1.1-548e3c2f04da2a61ceaf9c4e1589f264',
     'Service': '1.22-8a740459ab9bf258a19c8fcb875c2d9a',
     'ServiceList': '1.19-5325bce13eebcbf22edc9678285270cc',
-    'ShareMapping': '1.0-5ed0db9b97582e84d582c0b8488aa5df',
+    'ShareMapping': '1.0-44eea3697a5310f857f4d2a9f4c8d699',
     'ShareMappingList': '1.0-634980d5efdf3656e28c8dec3d862ab9',
     'ShareMetadata': '1.0-09f69ac0bd47371417b5477a277e43af',
     'Tag': '1.1-8b8d7d5b48887651a0e01241672e2963',

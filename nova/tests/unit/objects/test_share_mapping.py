@@ -34,6 +34,8 @@ fake_share_mapping = {
     'tag': 'fake_tag',
     'export_location': '192.168.122.152:/manila/share',
     'share_proto': 'NFS',
+    'access_to': '',
+    'access_key': '',
     }
 
 fake_share_mapping2 = {
@@ -47,6 +49,8 @@ fake_share_mapping2 = {
     'tag': 'fake_tag2',
     'export_location': '192.168.122.152:/manila/share2',
     'share_proto': 'NFS',
+    'access_to': '',
+    'access_key': '',
     }
 
 fake_share_mapping_attached = deepcopy(fake_share_mapping)
@@ -58,7 +62,7 @@ class _TestShareMapping(object):
         self.compare_obj(
             share_mapping,
             fake_share_mapping,
-            allow_missing=['deleted', 'deleted_at'])
+            allow_missing=['deleted', 'deleted_at', "access_to", "access_key"])
 
     @mock.patch(
         'nova.db.main.api.share_mapping_update',
@@ -72,6 +76,8 @@ class _TestShareMapping(object):
         share_mapping.tag = 'fake_tag'
         share_mapping.export_location = '192.168.122.152:/manila/share'
         share_mapping.share_proto = 'NFS'
+        share_mapping.access_to = ''
+        share_mapping.access_key = ''
         share_mapping.save()
         mock_upd.assert_called_once_with(
             self.context,
@@ -94,6 +100,8 @@ class _TestShareMapping(object):
         share_mapping.tag = 'fake_tag'
         share_mapping.export_location = '192.168.122.152:/manila/share'
         share_mapping.share_proto = 'NFS'
+        share_mapping.access_to = ''
+        share_mapping.access_key = ''
         share_host_provider = share_mapping.get_share_host_provider()
         self.assertEqual(share_host_provider, '192.168.122.152')
 
@@ -106,6 +114,8 @@ class _TestShareMapping(object):
         share_mapping.tag = 'fake_tag'
         share_mapping.export_location = ''
         share_mapping.share_proto = 'NFS'
+        share_mapping.access_to = ''
+        share_mapping.access_key = ''
         share_host_provider = share_mapping.get_share_host_provider()
         self.assertIsNone(share_host_provider)
 
@@ -121,6 +131,8 @@ class _TestShareMapping(object):
         share_mapping.tag = 'fake_tag'
         share_mapping.export_location = '192.168.122.152:/manila/share'
         share_mapping.share_proto = 'NFS'
+        share_mapping.access_to = ''
+        share_mapping.access_key = ''
         share_mapping.create()
         mock_upd.assert_called_once_with(
             self.context,
@@ -146,6 +158,8 @@ class _TestShareMapping(object):
         share_mapping.tag = 'fake_tag'
         share_mapping.export_location = '192.168.122.152:/manila/share'
         share_mapping.share_proto = 'NFS'
+        share_mapping.access_to = ''
+        share_mapping.access_key = ''
         share_mapping.attach()
         mock_upd.assert_called_once_with(
             self.context,
@@ -172,6 +186,8 @@ class _TestShareMapping(object):
         share_mapping.tag = 'fake_tag'
         share_mapping.export_location = '192.168.122.152:/manila/share'
         share_mapping.share_proto = 'NFS'
+        share_mapping.access_to = ''
+        share_mapping.access_key = ''
         share_mapping.detach()
         mock_upd.assert_called_once_with(
             self.context,
@@ -197,6 +213,8 @@ class _TestShareMapping(object):
         share_mapping.tag = 'fake_tag'
         share_mapping.export_location = '192.168.122.152:/manila/share'
         share_mapping.share_proto = 'NFS'
+        share_mapping.access_to = ''
+        share_mapping.access_key = ''
         share_mapping.delete()
         mock_del.assert_called_once_with(
             self.context, uuids.instance, uuids.share)
