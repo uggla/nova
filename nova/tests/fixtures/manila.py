@@ -63,6 +63,11 @@ class ManilaFixture(fixtures.Fixture):
         share.is_public = True
         return share
 
+    def fake_get_cephfs(self, context, share_id):
+        share = self.fake_get(context, share_id)
+        share.share_proto = "CEPHFS"
+        return share
+
     def fake_get_access(self, context, share_id, access_type, access_to,):
         if self.call_count.get("fake_get_access") == 0:
             # First call, return None
@@ -79,6 +84,17 @@ class ManilaFixture(fixtures.Fixture):
                 "access_key": None,
             }
             return nova.share.manila.Access().from_manila_access(access)
+
+    def fake_get_access_cephfs(
+        self, context, share_id, access_type, access_to
+    ):
+        access = self.fake_get_access(
+            context, share_id, access_type, access_to)
+        if access:
+            access.access_type = "cephx"
+            access.access_to = "nova"
+            access.access_key = "mykey"
+        return access
 
     def fake_allow(self, context, share_id, access_type, access_to,
             access_level, microversion=None):
