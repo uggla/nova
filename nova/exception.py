@@ -712,7 +712,7 @@ class ShareMappingAlreadyExists(NotFound):
     msg_fmt = _("Share %(share_id)s already associated to this server.")
 
 
-class ShareProtocolUnknown(NotFound):
+class ShareProtocolNotSupported(NotFound):
     msg_fmt = _("Share protocol %(share_proto)s is unknown.")
 
 
