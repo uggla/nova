@@ -138,6 +138,18 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         }
         return nova.share.manila.from_manila_access(access)
 
+    def get_fake_share_mapping_cephfs(self):
+        share_mapping = self.get_fake_share_mapping()
+        share_mapping.share_proto = 'CEPHFS'
+        return share_mapping
+
+    def get_fake_share_access_cephfs(self):
+        access = self.get_fake_share_access()
+        access.access_type = 'cephx'
+        access.access_to = 'nova'
+        access.access_key = 'mykey'
+        return access
+
     def fake_share_info(self):
         share_mapping = {}
         share_mapping['id'] = 1
@@ -2301,7 +2313,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.virt.fake.FakeDriver.mount_share')
     @mock.patch('nova.share.manila.API.allow')
     @mock.patch('nova.share.manila.API.get_access')
-    def test_mount_share(self, mock_get_access, mock_allow, mock_drv):
+    def test_mount_nfs_share(self, mock_get_access, mock_allow, mock_drv):
         self.flags(shutdown_retry_interval=20, group='compute')
         instance = fake_instance.fake_instance_obj(
                 self.context,
@@ -2316,12 +2328,36 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             share_mapping.share_id, 'ip', compute_ip)
         mock_allow.assert_called_once_with(
             share_mapping.share_id, 'ip', compute_ip, 'rw')
-        mock_drv.assert_called_once_with(
-            self.context, instance, share_mapping)
+        mock_drv.assert_called_once_with(self.context, instance, share_mapping)
+
+    @mock.patch('nova.virt.fake.FakeDriver.mount_share')
+    @mock.patch('nova.share.manila.API.allow')
+    @mock.patch('nova.share.manila.API.get_access')
+    def test_mount_cephfs_share(self, mock_get_access, mock_allow, mock_drv):
+        self.flags(shutdown_retry_interval=20, group='compute')
+        instance = fake_instance.fake_instance_obj(
+                self.context,
+                uuid=uuids.instance,
+                vm_state=vm_states.ACTIVE,
+                task_state=task_states.POWERING_OFF)
+        share_mapping = self.get_fake_share_mapping_cephfs()
+        mock_get_access.side_effect = [
+            None,
+            self.get_fake_share_access_cephfs(),
+            self.get_fake_share_access_cephfs(),
+        ]
+        self.compute.mount_share(self.context, instance, share_mapping)
+        mock_get_access.assert_called_with(
+            share_mapping.share_id, 'cephx', 'nova')
+        mock_allow.assert_called_once_with(
+            share_mapping.share_id, 'cephx', 'nova', 'rw')
+        mock_drv.assert_called_once_with(self.context, instance, share_mapping)
+        self.assertEqual(share_mapping.access_to, 'nova')
+        self.assertEqual(share_mapping.access_key, 'mykey')
 
     @mock.patch('nova.share.manila.API.deny')
     @mock.patch('nova.virt.fake.FakeDriver.umount_share', return_value=False)
-    def test_umount_share(
+    def test_umount_nfs_share(
             self, mock_drv, mock_deny):
         self.flags(shutdown_retry_interval=20, group='compute')
         instance = fake_instance.fake_instance_obj(
@@ -2332,10 +2368,26 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         compute_ip = CONF.my_block_storage_ip
         share_mapping = self.get_fake_share_mapping()
         self.compute.umount_share(self.context, instance, share_mapping)
+        mock_drv.assert_called_once_with(self.context, instance, share_mapping)
+        mock_deny.assert_called_once_with(
+            share_mapping.share_id, 'ip', compute_ip)
+
+    @mock.patch('nova.share.manila.API.deny')
+    @mock.patch('nova.virt.fake.FakeDriver.umount_share', return_value=False)
+    def test_umount_cephfs_share(
+            self, mock_drv, mock_deny):
+        self.flags(shutdown_retry_interval=20, group='compute')
+        instance = fake_instance.fake_instance_obj(
+                self.context,
+                uuid=uuids.instance,
+                vm_state=vm_states.ACTIVE,
+                task_state=task_states.POWERING_OFF)
+        share_mapping = self.get_fake_share_mapping_cephfs()
+        self.compute.umount_share(self.context, instance, share_mapping)
         mock_drv.assert_called_once_with(
             self.context, instance, share_mapping)
         mock_deny.assert_called_once_with(
-            share_mapping.share_id, 'ip', compute_ip)
+            share_mapping.share_id, 'cephx', 'nova')
 
     @mock.patch('nova.compute.manager.ComputeManager._get_share_info',
                 return_value=[])

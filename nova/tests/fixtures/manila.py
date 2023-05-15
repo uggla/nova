@@ -66,7 +66,12 @@ class ManilaFixture(fixtures.Fixture):
             manila_share, export_location
         )
 
-    def fake_get_access(self, share_id, access_type, access_to,):
+    def fake_get_cephfs(self, share_id):
+        share = self.fake_get(share_id)
+        share.share_proto = "CEPHFS"
+        return share
+
+    def fake_get_access(self, share_id, access_type, access_to):
         if self.call_count.get("fake_get_access") == 0:
             # First call, return None
             self.call_count["fake_get_access"] += 1
@@ -83,10 +88,16 @@ class ManilaFixture(fixtures.Fixture):
             }
             return nova.share.manila.from_manila_access(access)
 
-    def fake_allow(self, share_id, access_type, access_to,
-            access_level, microversion=None):
+    def fake_get_access_cephfs(self, share_id, access_type, access_to):
+        access = self.fake_get_access(share_id, access_type, access_to)
+        if access:
+            access.access_type = "cephx"
+            access.access_to = "nova"
+            access.access_key = "mykey"
+        return access
+
+    def fake_allow(self, share_id, access_type, access_to, access_level):
         pass
 
-    def fake_deny(self, share_id, access_type, access_to,
-            microversion=None):
+    def fake_deny(self, share_id, access_type, access_to):
         return 202
