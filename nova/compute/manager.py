@@ -4663,17 +4663,31 @@ class ComputeManager(manager.Manager):
                         "too many retries",
                     )
 
+            def _enhance_share_mapping_with_ceph_credentials():
+                # Enhance the share_mapping object by adding Ceph
+                # credential information
+                access = _get_access()
+                share_mapping.access_to = access_to
+                share_mapping.access_key = access.access_key
+
             def _set_share_mapping_status(status):
                 share_mapping.status = status
                 share_mapping.save()
 
             try:
-                access_type = 'ip'
-                access_to = CONF.my_block_storage_ip
+                (
+                    access_type,
+                    access_to
+                ) = self._set_access_according_to_protocol(
+                    context, share_mapping)
 
                 if not _check_access():
                     _apply_policy()
                     _wait_policy_to_be_applied()
+
+                if share_mapping.share_proto == (
+                    fields.ShareMappingProto.CEPHFS):
+                    _enhance_share_mapping_with_ceph_credentials()
 
                 LOG.debug("Mounting share %s", share_mapping.share_id)
                 self.driver.mount_share(context, instance, share_mapping)
@@ -4712,8 +4726,12 @@ class ComputeManager(manager.Manager):
                 still_used = self.driver.umount_share(
                     context, instance, share_mapping)
 
-                access_type = 'ip'
-                access_to = CONF.my_block_storage_ip
+                (
+                    access_type,
+                    access_to,
+                ) = self._set_access_according_to_protocol(
+                    context, share_mapping
+                )
 
                 if not still_used:
                     # self.manila_api.unlock(share_mapping.share_id)
@@ -4738,6 +4756,19 @@ class ComputeManager(manager.Manager):
                 raise
 
         _umount_share(context, instance, share_mapping)
+
+    def _set_access_according_to_protocol(self, context, share_mapping):
+        if share_mapping.share_proto == fields.ShareMappingProto.NFS:
+            access_type = 'ip'
+            access_to = CONF.my_block_storage_ip
+        elif share_mapping.share_proto == fields.ShareMappingProto.CEPHFS:
+            access_type = 'cephx'
+            access_to = 'nova'
+        else:
+            raise exception.ShareProtocolUnknown(
+                share_proto=share_mapping.share_proto
+            )
+        return (access_type, access_to)
 
     @wrap_instance_fault
     def _rotate_backups(self, context, instance, backup_type, rotation):
