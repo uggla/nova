@@ -1083,7 +1083,9 @@ class ComputeManager(manager.Manager):
 
         for share_mapping in share_info:
             try:
-                self.mount_share(context, instance, share_mapping)
+                LOCAL = fields.ShareMappingProto.LOCAL
+                if not share_mapping.share_proto == LOCAL:
+                    self.mount_share(context, instance, share_mapping)
             except exception.ShareMountError:
                 LOG.warning(
                     "Share %(share_id)s could not be mounted for "
