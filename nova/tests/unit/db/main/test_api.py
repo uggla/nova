@@ -4203,6 +4203,15 @@ class ShareMappingDBApiTestCase(test.TestCase):
                 'tag': 'fake-tag2',
                 'export_location': 'fake-export_location2',
                 'share_proto': 'NFS'
+            },
+            '3': {
+                'uuid': 'fake-uuid3',
+                'instance_uuid': 'fake-instance-uuid2',
+                'share_id': '3',
+                'status': 'attached',
+                'tag': 'fake-tag3',
+                'export_location': 'fake-export_location3',
+                'share_proto': 'LOCAL'
             }
         }
 
@@ -4226,6 +4235,16 @@ class ShareMappingDBApiTestCase(test.TestCase):
             export_location='fake-export_location2',
             share_proto='NFS'
         )
+        db.share_mapping_update(
+            ctxt,
+            uuid='fake-uuid3',
+            instance_uuid='fake-instance-uuid2',
+            share_id='3',
+            status='attached',
+            tag='fake-tag3',
+            export_location='fake-export_location3',
+            share_proto='LOCAL'
+        )
 
         return expected_share_mappings
 
@@ -4234,12 +4253,12 @@ class ShareMappingDBApiTestCase(test.TestCase):
         expected_share_mappings = self.create_test_data(ctxt)
 
         share_mappings = db.share_mapping_get_all(ctxt)
-        self.assertEqual(len(share_mappings), 2)
+        self.assertEqual(len(share_mappings), 3)
         for share in share_mappings:
             self._compare(
                 share, expected_share_mappings[share.share_id])
 
-        # Making an update
+        # Making an update only on record 0 and 1
         db.share_mapping_update(
             ctxt,
             uuid='fake-uuid1',
@@ -4279,11 +4298,20 @@ class ShareMappingDBApiTestCase(test.TestCase):
                 'tag': 'fake-tag2-updated',
                 'export_location': 'fake-export_location2',
                 'share_proto': 'NFS'
+            },
+            '3': {
+                'uuid': 'fake-uuid3',
+                'instance_uuid': 'fake-instance-uuid2',
+                'share_id': '3',
+                'status': 'attached',
+                'tag': 'fake-tag3',
+                'export_location': 'fake-export_location3',
+                'share_proto': 'LOCAL'
             }
         }
 
         share_mappings = db.share_mapping_get_all(ctxt)
-        self.assertEqual(len(share_mappings), 2)
+        self.assertEqual(len(share_mappings), 3)
         for share in share_mappings:
             self._compare(
                 share, expected_share_mappings_after_update[share.share_id])
@@ -4320,7 +4348,7 @@ class ShareMappingDBApiTestCase(test.TestCase):
         share_mappings = (
             db.share_mapping_get_by_instance_uuid(ctxt, 'fake-instance-uuid2')
         )
-        self.assertEqual(len(share_mappings), 1)
+        self.assertEqual(len(share_mappings), 2)
         self._compare(
             share_mappings[0],
             expected_share_mappings[share_mappings[0].share_id]
@@ -4373,7 +4401,7 @@ class ShareMappingDBApiTestCase(test.TestCase):
         )
 
         share_mappings = db.share_mapping_get_all(ctxt)
-        self.assertEqual(len(share_mappings), 1)
+        self.assertEqual(len(share_mappings), 2)
         for share in share_mappings:
             self._compare(
                 share, expected_share_mappings[share.share_id]
@@ -4384,7 +4412,30 @@ class ShareMappingDBApiTestCase(test.TestCase):
             '2'
         )
         share_mappings = db.share_mapping_get_all(ctxt)
-        self.assertEqual(len(share_mappings), 0)
+        self.assertEqual(len(share_mappings), 1)
+
+    def test_share_mapping_get_local_share_by_instance_uuid(self):
+        ctxt = context.get_admin_context()
+        expected_share_mappings = self.create_test_data(ctxt)
+
+        share_mappings = (
+            db.share_mapping_get_local_share_by_instance_uuid(
+                ctxt, 'fake-instance-uuid2')
+        )
+        self.assertEqual(share_mappings.share_id, str(3))
+        self._compare(
+            share_mappings,
+            expected_share_mappings[share_mappings.share_id]
+        )
+
+    def test_share_mapping_get_local_share_by_instance_uuid_missing(self):
+        ctxt = context.get_admin_context()
+
+        share_mappings = (
+            db.share_mapping_get_local_share_by_instance_uuid(
+                ctxt, 'fake-instance-uuid1')
+        )
+        self.assertIsNone(share_mappings)
 
 
 class TaskLogTestCase(test.TestCase):

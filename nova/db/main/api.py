@@ -52,6 +52,7 @@ from nova.db import utils as db_utils
 from nova.db.utils import require_context
 from nova import exception
 from nova.i18n import _
+from nova.objects import fields
 from nova import safe_utils
 
 profiler_sqlalchemy = importutils.try_import('osprofiler.sqlalchemy')
@@ -4880,6 +4881,21 @@ def share_mapping_get_by_instance_uuid_and_share_id(
     """Get share_mapping record for a specific instance and share_id."""
     return context.session.query(models.ShareMapping).\
     filter_by(instance_uuid=instance_uuid, share_id=share_id).first()
+
+
+@require_context
+@pick_context_manager_reader
+def share_mapping_get_local_share_by_instance_uuid(
+        context, instance_uuid):
+    """Get share_mapping record for a local share and a specific instance."""
+    return (
+        context.session.query(models.ShareMapping)
+        .filter_by(
+            instance_uuid=instance_uuid,
+            share_proto=fields.ShareMappingProto.LOCAL,
+        )
+        .first()
+    )
 
 
 @require_context

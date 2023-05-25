@@ -53,6 +53,21 @@ fake_share_mapping2 = {
     'access_key': '',
     }
 
+fake_share_mapping3 = {
+    'created_at': datetime.datetime(2022, 8, 25, 10, 5, 4),
+    'updated_at': None,
+    'id': 3,
+    'uuid': uuids.share_mapping2,
+    'instance_uuid': uuids.instance,
+    'share_id': uuids.share3,
+    'status': 'inactive',
+    'tag': 'scaphandre',
+    'export_location': '/var',
+    'share_proto': 'LOCAL',
+    'access_to': '',
+    'access_key': '',
+    }
+
 fake_share_mapping_attached = deepcopy(fake_share_mapping)
 fake_share_mapping_attached['status'] = 'active'
 
@@ -259,6 +274,51 @@ class _TestShareMapping(object):
                 uuids.share)
         mock_get.assert_called_once_with(
             self.context, uuids.instance, uuids.share)
+
+    def test_get_local_share_by_instance_uuid(self):
+
+        fake_db_sm = models.ShareMapping()
+        fake_db_sm.id = 3
+        fake_db_sm.created_at = datetime.datetime(2022, 8, 25, 10, 5, 4)
+        fake_db_sm.uuid = fake_share_mapping3['uuid']
+        fake_db_sm.instance_uuid = fake_share_mapping3['instance_uuid']
+        fake_db_sm.share_id = fake_share_mapping3['share_id']
+        fake_db_sm.status = fake_share_mapping3['status']
+        fake_db_sm.tag = fake_share_mapping3['tag']
+        fake_db_sm.export_location = fake_share_mapping3['export_location']
+        fake_db_sm.share_proto = fake_share_mapping3['share_proto']
+
+        with mock.patch(
+            'nova.db.main.api.share_mapping_get_local_share_by_instance_uuid',
+            return_value=fake_db_sm
+        ) as mock_get:
+
+            share_mapping = sm.ShareMapping.get_local_share_by_instance_uuid(
+                self.context,
+                uuids.instance
+            )
+
+            mock_get.assert_called_once_with(
+                self.context, uuids.instance)
+
+            self._compare_obj(share_mapping, fake_share_mapping3)
+
+    def test_get_local_share_by_instance_uuid_missing(self):
+
+        with mock.patch(
+            'nova.db.main.api.share_mapping_get_local_share_by_instance_uuid',
+            return_value=None
+        ) as mock_get:
+
+            share_mapping = sm.ShareMapping.get_local_share_by_instance_uuid(
+                self.context,
+                uuids.instance
+            )
+
+            mock_get.assert_called_once_with(
+                self.context, uuids.instance)
+
+            self.assertIsNone(share_mapping)
 
 
 class _TestShareMappingList(object):
