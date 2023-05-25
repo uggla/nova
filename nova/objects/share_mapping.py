@@ -92,8 +92,11 @@ class ShareMapping(base.NovaTimestampObject, base.NovaObject):
             self.share_id,
             self.instance_uuid,
         )
-        self.status = fields.ShareMappingStatus.INACTIVE
-        self.save()
+        if self.share_proto == fields.ShareMappingProto.LOCAL:
+            self.delete()
+        else:
+            self.status = fields.ShareMappingStatus.INACTIVE
+            self.save()
 
     @base.remotable_classmethod
     def get_by_instance_uuid_and_share_id(
@@ -107,6 +110,20 @@ class ShareMapping(base.NovaTimestampObject, base.NovaObject):
         # associated only one time to an instance.
         # The REST API prevent the user to create duplicate share mapping by
         # raising an exception.ShareMappingAlreadyExists.
+        assert isinstance(db_share_mapping, models.ShareMapping)
+        return ShareMapping._from_db_object(
+                context,
+                share_mapping,
+                db_share_mapping)
+
+    @base.remotable_classmethod
+    def get_local_share_by_instance_uuid(
+            cls, context, instance_uuid):
+        share_mapping = ShareMapping(context)
+        db_share_mapping = db.share_mapping_get_local_share_by_instance_uuid(
+            context, instance_uuid)
+        if not db_share_mapping:
+            return None
         assert isinstance(db_share_mapping, models.ShareMapping)
         return ShareMapping._from_db_object(
                 context,
