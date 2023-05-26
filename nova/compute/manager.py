@@ -3156,7 +3156,8 @@ class ComputeManager(manager.Manager):
 
         if share_info:
             for share in share_info:
-                self.umount_share(context, instance, share)
+                if not share.share_proto == fields.ShareMappingProto.LOCAL:
+                    self.umount_share(context, instance, share)
                 share.delete()
 
         connector = None
