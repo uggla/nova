@@ -2626,6 +2626,7 @@ class ComputeManager(manager.Manager):
                     block_device_info = resources['block_device_info']
                     network_info = resources['network_info']
                     accel_info = resources['accel_info']
+                    share_info = self._get_share_info(context, instance)
                     LOG.debug('Start spawning the instance on the hypervisor.',
                               instance=instance)
                     with timeutils.StopWatch() as timer:
@@ -2633,7 +2634,8 @@ class ComputeManager(manager.Manager):
                                           injected_files, admin_password,
                                           allocs, network_info=network_info,
                                           block_device_info=block_device_info,
-                                          accel_info=accel_info)
+                                          accel_info=accel_info,
+                                          share_info=share_info)
                     LOG.info('Took %0.2f seconds to spawn the instance on '
                              'the hypervisor.', timer.elapsed(),
                              instance=instance)
