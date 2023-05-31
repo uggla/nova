@@ -145,7 +145,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         access.access_key = 'mykey'
         return access
 
-    def fake_share_info(self):
+    def fake_share_info(self, local_share=False):
         share_mapping = {}
         share_mapping['id'] = 1
         share_mapping['created_at'] = None
@@ -173,12 +173,39 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         share_mapping2['export_location'] = 'fake_export_location2'
         share_mapping2['share_proto'] = 'NFS'
 
+        # This share is a local one
+        share_mapping3 = {}
+        share_mapping3['id'] = 3
+        share_mapping3['created_at'] = None
+        share_mapping3['updated_at'] = None
+        share_mapping3['uuid'] = uuids.share_mapping3
+        share_mapping3['instance_uuid'] = (
+            '386dbea6-0338-4104-8eb9-42b214b40311')
+        share_mapping3['share_id'] = '85e917dd-1ecb-4885-87d4-cc506e1ac0f3'
+        share_mapping3['status'] = 'inactive'
+        share_mapping3['tag'] = 'scaphandre'
+        share_mapping3['export_location'] = '/var'
+        share_mapping3['share_proto'] = 'LOCAL'
+
+        share_mappings = [share_mapping, share_mapping2]
+
+        if local_share:
+            share_mappings = [share_mapping, share_mapping2, share_mapping3]
+
         share_info = objects.base.obj_make_list(
             self.context,
             objects.ShareMappingList(self.context),
             objects.ShareMapping,
-            [share_mapping, share_mapping2])
+            share_mappings)
         return share_info
+
+    def fake_image_metadata(self, local_share=False):
+        image_metadata = objects.ImageMeta()
+        image_metadata_properties = objects.ImageMetaProps()
+        if local_share:
+            image_metadata_properties.hw_share_local_fs = True
+        image_metadata.properties = image_metadata_properties
+        return image_metadata
 
     @mock.patch.object(manager.ComputeManager, '_get_power_state')
     @mock.patch.object(manager.ComputeManager, '_sync_instance_power_state')
@@ -2276,17 +2303,199 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                 CONF.shutdown_timeout,
                 20, None)
 
+    # +-------+----------+-----------------------------------+
+    # | Local | Local    | Actions                           |
+    # | share | share    |                                   |
+    # |       | required |                                   |
+    # +-------+----------+-----------------------------------+
+    # | no    | no       | Do nothing                        |
+    # |       |          | Get the list of share_mapping     |
+    # +-------+----------+-----------------------------------+
+    @mock.patch('nova.objects.ImageMeta.from_instance')
+    @mock.patch('nova.objects.ShareMapping.get_local_share_by_instance_uuid')
     @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
-    def test_get_share_info(self, mock_db):
+    def test_get_share_info(self, mock_sm, mock_sm_local_share, mock_img_meta):
         self.flags(shutdown_retry_interval=20, group='compute')
         instance = fake_instance.fake_instance_obj(
                 self.context,
                 uuid=uuids.instance,
                 vm_state=vm_states.ACTIVE,
                 task_state=task_states.POWERING_OFF)
-        mock_db.return_value = self.fake_share_info()
+
+        mock_sm_local_share.return_value = None
+        mock_sm.return_value = self.fake_share_info()
+        mock_img_meta.return_value = self.fake_image_metadata()
 
         share_info = self.compute._get_share_info(self.context, instance)
+
+        self.assertIsInstance(
+            share_info, objects.share_mapping.ShareMappingList)
+        self.assertEqual(len(share_info), 1)
+        self.assertIsInstance(
+            share_info[0], objects.share_mapping.ShareMapping)
+        self.assertEqual(share_info[0].id, 1)
+        self.assertEqual(
+            share_info[0].instance_uuid,
+            '386dbea6-0338-4104-8eb9-42b214b40311')
+        self.assertEqual(
+            share_info[0].share_id, '232a4b40-306b-4cce-8bf4-689d2e671552')
+        self.assertEqual(share_info[0].status, 'inactive')
+        self.assertEqual(share_info[0].tag, 'fake_tag')
+        self.assertEqual(share_info[0].export_location, 'fake_export_location')
+        self.assertEqual(share_info[0].share_proto, 'NFS')
+
+    # +-------+----------+-----------------------------------+
+    # | Local | Local    | Actions                           |
+    # | share | share    |                                   |
+    # |       | required |                                   |
+    # +-------+----------+-----------------------------------+
+    # | no    | yes      | Create a "local" share            |
+    # |       |          | Get the list of share_mapping     |
+    # |       |          | that will include the created one |
+    # +-------+----------+-----------------------------------+
+    @mock.patch('nova.objects.ShareMapping.create')
+    @mock.patch('nova.objects.ImageMeta.from_instance')
+    @mock.patch('nova.objects.ShareMapping.get_local_share_by_instance_uuid')
+    @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
+    def test_get_share_info_for_local_share_required(
+        self, mock_sm, mock_sm_local_share, mock_img_meta, mock_sm_create
+    ):
+        self.flags(shutdown_retry_interval=20, group='compute')
+        self.flags(share_local_fs='{"/var": "scaphandre"}')
+        instance = fake_instance.fake_instance_obj(
+                self.context,
+                uuid="386dbea6-0338-4104-8eb9-42b214b40311",
+                vm_state=vm_states.ACTIVE,
+                task_state=task_states.POWERING_OFF)
+
+        mock_sm_local_share.return_value = None
+        mock_sm.return_value = self.fake_share_info(local_share=True)
+        mock_img_meta.return_value = self.fake_image_metadata(local_share=True)
+
+        share_info = self.compute._get_share_info(self.context, instance)
+
+        mock_sm_create.assert_called_once()
+        self.assertIsInstance(
+            share_info, objects.share_mapping.ShareMappingList)
+        self.assertEqual(len(share_info), 2)
+        self.assertIsInstance(
+            share_info[0], objects.share_mapping.ShareMapping)
+        self.assertEqual(share_info[0].id, 1)
+        self.assertEqual(
+            share_info[0].instance_uuid,
+            '386dbea6-0338-4104-8eb9-42b214b40311')
+        self.assertEqual(
+            share_info[0].share_id, '232a4b40-306b-4cce-8bf4-689d2e671552')
+        self.assertEqual(share_info[0].status, 'inactive')
+        self.assertEqual(share_info[0].tag, 'fake_tag')
+        self.assertEqual(share_info[0].export_location, 'fake_export_location')
+        self.assertEqual(share_info[0].share_proto, 'NFS')
+        self.assertIsInstance(
+            share_info[1], objects.share_mapping.ShareMapping)
+        self.assertEqual(share_info[1].id, 3)
+        self.assertEqual(
+            share_info[1].instance_uuid,
+            '386dbea6-0338-4104-8eb9-42b214b40311')
+        self.assertIsNotNone(share_info[1].share_id)
+        self.assertEqual(share_info[1].status, 'inactive')
+        self.assertEqual(share_info[1].tag, 'scaphandre')
+        self.assertEqual(share_info[1].export_location, '/var')
+        self.assertEqual(share_info[1].share_proto, 'LOCAL')
+
+    # +-------+----------+-----------------------------------+
+    # | Local | Local    | Actions                           |
+    # | share | share    |                                   |
+    # |       | required |                                   |
+    # +-------+----------+-----------------------------------+
+    # | yes   | yes      | Do nothing                        |
+    # |       |          | Get the list of share_mapping,    |
+    # |       |          | local share will be included.     |
+    # +-------+----------+-----------------------------------+
+    @mock.patch('nova.objects.ShareMapping.create')
+    @mock.patch('nova.objects.ImageMeta.from_instance')
+    @mock.patch('nova.objects.ShareMapping.get_local_share_by_instance_uuid')
+    @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
+    def test_get_share_info_for_local_share_already_created(
+        self, mock_sm, mock_sm_local_share, mock_img_meta, mock_sm_create
+    ):
+        self.flags(shutdown_retry_interval=20, group='compute')
+        self.flags(share_local_fs='{"/var": "scaphandre"}')
+        instance = fake_instance.fake_instance_obj(
+                self.context,
+                uuid="386dbea6-0338-4104-8eb9-42b214b40311",
+                vm_state=vm_states.ACTIVE,
+                task_state=task_states.POWERING_OFF)
+
+        mock_sm_local_share.return_value = self.fake_share_info(
+            local_share=True
+        )[2]
+        mock_sm.return_value = self.fake_share_info(local_share=True)
+        mock_img_meta.return_value = self.fake_image_metadata(local_share=True)
+
+        share_info = self.compute._get_share_info(self.context, instance)
+
+        mock_sm_create.assert_not_called()
+        self.assertIsInstance(
+            share_info, objects.share_mapping.ShareMappingList)
+        self.assertEqual(len(share_info), 2)
+        self.assertIsInstance(
+            share_info[0], objects.share_mapping.ShareMapping)
+        self.assertEqual(share_info[0].id, 1)
+        self.assertEqual(
+            share_info[0].instance_uuid,
+            '386dbea6-0338-4104-8eb9-42b214b40311')
+        self.assertEqual(
+            share_info[0].share_id, '232a4b40-306b-4cce-8bf4-689d2e671552')
+        self.assertEqual(share_info[0].status, 'inactive')
+        self.assertEqual(share_info[0].tag, 'fake_tag')
+        self.assertEqual(share_info[0].export_location, 'fake_export_location')
+        self.assertEqual(share_info[0].share_proto, 'NFS')
+        self.assertIsInstance(
+            share_info[1], objects.share_mapping.ShareMapping)
+        self.assertEqual(share_info[1].id, 3)
+        self.assertEqual(
+            share_info[1].instance_uuid,
+            '386dbea6-0338-4104-8eb9-42b214b40311')
+        self.assertIsNotNone(share_info[1].share_id)
+        self.assertEqual(share_info[1].status, 'inactive')
+        self.assertEqual(share_info[1].tag, 'scaphandre')
+        self.assertEqual(share_info[1].export_location, '/var')
+        self.assertEqual(share_info[1].share_proto, 'LOCAL')
+
+    # +-------+----------+-----------------------------------+
+    # | Local | Local    | Actions                           |
+    # | share | share    |                                   |
+    # |       | required |                                   |
+    # +-------+----------+-----------------------------------+
+    # | yes   | no       | Delete the "local" share          |
+    # |       |          | Get the list of share_mapping,    |
+    # |       |          | local share should no be included |
+    # |       |          | anymore                           |
+    # +-------+----------+-----------------------------------+
+    @mock.patch('nova.objects.ShareMapping.delete')
+    @mock.patch('nova.objects.ImageMeta.from_instance')
+    @mock.patch('nova.objects.ShareMapping.get_local_share_by_instance_uuid')
+    @mock.patch('nova.objects.ShareMappingList.get_by_instance_uuid')
+    def test_get_share_info_for_local_share_not_required_anymore(
+        self, mock_sm, mock_sm_local_share, mock_img_meta, mock_sm_delete
+    ):
+        self.flags(shutdown_retry_interval=20, group='compute')
+        self.flags(share_local_fs='{"/var": "scaphandre"}')
+        instance = fake_instance.fake_instance_obj(
+                self.context,
+                uuid="386dbea6-0338-4104-8eb9-42b214b40311",
+                vm_state=vm_states.ACTIVE,
+                task_state=task_states.POWERING_OFF)
+
+        mock_sm_local_share.return_value = self.fake_share_info(
+            local_share=True
+        )[2]
+        mock_sm.return_value = self.fake_share_info()
+        mock_img_meta.return_value = self.fake_image_metadata()
+
+        share_info = self.compute._get_share_info(self.context, instance)
+
+        mock_sm_delete.assert_called_once()
         self.assertIsInstance(
             share_info, objects.share_mapping.ShareMappingList)
         self.assertEqual(len(share_info), 1)
