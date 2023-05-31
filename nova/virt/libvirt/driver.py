@@ -12619,6 +12619,16 @@ class LibvirtDriver(driver.ComputeDriver):
                 fs.source_type = 'mount'
                 fs.access_mode = 'passthrough'
                 fs.driver_type = 'virtiofs'
-                fs.source_dir = self._get_share_mount_path(instance, share)
                 fs.target_dir = share.tag
+                if share.share_proto == fields.ShareMappingProto.LOCAL:
+                    fs.source_dir = os.path.join(
+                        share.export_location, guest.name
+                    )
+                    if not os.path.exists(fs.source_dir):
+                        os.makedirs(fs.source_dir)
+                    # Currently virtiofs does not support readonly filesystem
+                    # https://gitlab.com/virtio-fs/virtiofsd/-/issues/97
+                    fs.ro = False
+                else:
+                    fs.source_dir = self._get_share_mount_path(instance, share)
                 guest.add_device(fs)

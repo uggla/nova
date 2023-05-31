@@ -1448,6 +1448,7 @@ class LibvirtConfigGuestFilesysTest(LibvirtConfigBaseTest):
         obj.driver_type = "virtiofs"
         obj.source_dir = "/mnt/nfsmount"
         obj.target_dir = "mount_tag"
+        obj.ro = True
 
         xml = obj.to_xml()
         self.assertXmlEqual(xml, """
@@ -1455,6 +1456,7 @@ class LibvirtConfigGuestFilesysTest(LibvirtConfigBaseTest):
               <driver type='virtiofs'/>
               <source dir="/mnt/nfsmount"/>
               <target dir="mount_tag"/>
+              <readonly/>
             </filesystem>""")
 
     def test_config_block(self):
