@@ -1513,6 +1513,7 @@ class LibvirtConfigGuestFilesys(LibvirtConfigGuestDevice):
         self.target_dir = "/"
         self.driver_type = "loop"
         self.driver_format = "raw"
+        self.ro = False
 
     def format_dom(self):
         dev = super(LibvirtConfigGuestFilesys, self).format_dom()
@@ -1533,6 +1534,9 @@ class LibvirtConfigGuestFilesys(LibvirtConfigGuestDevice):
         else:
             dev.append(etree.Element("source", dir=self.source_dir))
         dev.append(etree.Element("target", dir=self.target_dir))
+
+        if self.ro:
+            dev.append(etree.Element("readonly"))
 
         return dev
 
