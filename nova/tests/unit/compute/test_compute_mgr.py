@@ -7436,6 +7436,8 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
         mock_get_arqs.assert_called_once_with(
             self.instance.uuid, only_resolved=True)
 
+    @mock.patch('nova.compute.manager.ComputeManager._get_share_info',
+               return_value=nova.objects.ShareMappingList())
     @mock.patch('nova.compute.resource_tracker.ResourceTracker.instance_claim')
     @mock.patch.object(fake_driver.FakeDriver, 'spawn')
     @mock.patch('nova.objects.Instance.save')
@@ -7448,7 +7450,8 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
     @mock.patch.object(manager.ComputeManager, '_notify_about_instance_usage')
     def test_spawn_called_with_accel_info(self, mock_ins_usage,
             mock_ins_create, mock_dev_tag, mock_certs, mock_req_group_map,
-            mock_get_allocations, mock_ins_save, mock_spawn, mock_claim):
+            mock_get_allocations, mock_ins_save, mock_spawn, mock_claim,
+            mock_share_info):
 
         accel_info = [{'k1': 'v1', 'k2': 'v2'}]
 
@@ -7476,7 +7479,97 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
 
         mock_spawn.assert_called_once_with(self.context, self.instance,
             mock.ANY, self.injected_files, self.admin_pass, mock.ANY,
-            network_info=None, block_device_info=None, accel_info=accel_info)
+            network_info=None, block_device_info=None, accel_info=accel_info,
+            share_info=mock_share_info.return_value)
+
+    @mock.patch('nova.objects.share_mapping.'
+                'ShareMappingList.get_by_instance_uuid')
+    @mock.patch('nova.objects.share_mapping.ShareMapping.'
+                'get_local_share_by_instance_uuid', return_value=None)
+    @mock.patch('nova.compute.resource_tracker.ResourceTracker.instance_claim')
+    @mock.patch.object(fake_driver.FakeDriver, 'spawn')
+    @mock.patch('nova.objects.Instance.save')
+    @mock.patch('nova.scheduler.client.report.SchedulerReportClient.'
+                'get_allocations_for_consumer')
+    @mock.patch.object(manager.ComputeManager, '_get_request_group_mapping')
+    @mock.patch.object(manager.ComputeManager, '_check_trusted_certs')
+    @mock.patch.object(manager.ComputeManager, '_check_device_tagging')
+    @mock.patch.object(compute_utils, 'notify_about_instance_create')
+    @mock.patch.object(manager.ComputeManager, '_notify_about_instance_usage')
+    def test_spawn_called_with_share_info(self, mock_ins_usage,
+            mock_ins_create, mock_dev_tag, mock_certs, mock_req_group_map,
+            mock_get_allocations, mock_ins_save, mock_spawn, mock_claim,
+            mock_local_share, mock_sm):
+
+        @contextlib.contextmanager
+        def fake_build_resources(compute_mgr, *args, **kwargs):
+            yield {
+                'block_device_info': None,
+                'network_info': None,
+                'accel_info': None,
+            }
+
+        self.stub_out('nova.compute.manager.ComputeManager._build_resources',
+                      fake_build_resources)
+        mock_req_group_map.return_value = None
+        mock_get_allocations.return_value = mock.sentinel.allocation
+        mock_sm.return_value = self.fake_share_info()
+
+        self.compute._build_and_run_instance(self.context, self.instance,
+            self.image, injected_files=self.injected_files,
+            admin_password=self.admin_pass,
+            requested_networks=self.requested_networks,
+            security_groups=self.security_groups,
+            block_device_mapping=self.block_device_mapping,
+            node=self.node, limits=self.limits,
+            filter_properties=self.filter_properties)
+
+        mock_local_share.assert_called_once_with(
+            self.context, self.instance.uuid
+        )
+
+        mock_sm.assert_called_once_with(
+            self.context, self.instance.uuid
+        )
+
+        mock_spawn.assert_called_once_with(self.context, self.instance,
+            mock.ANY, self.injected_files, self.admin_pass, mock.ANY,
+            network_info=None, block_device_info=None, accel_info=None,
+            share_info=mock.ANY)
+
+        args, kwargs = mock_spawn.call_args
+        kwargs['share_info'][0].id = mock_sm.return_value[0].id
+        kwargs['share_info'][0].uuid = mock_sm.return_value[0].uuid
+        kwargs['share_info'][0].instance_uuid = (
+            mock_sm.return_value[0].instance_uuid)
+        kwargs['share_info'][0].share_id = mock_sm.return_value[0].share_id
+        kwargs['share_info'][0].status = mock_sm.return_value[0].status
+        kwargs['share_info'][0].tag = mock_sm.return_value[0].tag
+        kwargs['share_info'][0].export_location = (
+            mock_sm.return_value[0].export_location)
+        kwargs['share_info'][0].share_proto = (
+            mock_sm.return_value[0].share_proto)
+
+    def fake_share_info(self, local_share=False):
+        share_mapping = {}
+        share_mapping['id'] = 1
+        share_mapping['created_at'] = None
+        share_mapping['updated_at'] = None
+        share_mapping['uuid'] = uuids.share_mapping
+        share_mapping['instance_uuid'] = (
+            '386dbea6-0338-4104-8eb9-42b214b40311')
+        share_mapping['share_id'] = '85e917dd-1ecb-4885-87d4-cc506e1ac0f3'
+        share_mapping['status'] = 'inactive'
+        share_mapping['tag'] = 'scaphandre'
+        share_mapping['export_location'] = '/var'
+        share_mapping['share_proto'] = 'LOCAL'
+
+        share_info = objects.base.obj_make_list(
+            self.context,
+            objects.ShareMappingList(self.context),
+            objects.ShareMapping,
+            [share_mapping])
+        return share_info
 
     @mock.patch.object(objects.Instance, 'save')
     @mock.patch.object(nova.compute.manager.ComputeManager,
@@ -7722,6 +7815,8 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
                 self.security_groups, self.block_device_mapping,
                 request_spec={}, host_lists=[fake_host_list])
 
+    @mock.patch('nova.compute.manager.ComputeManager._get_share_info',
+                       return_value=nova.objects.ShareMappingList())
     @mock.patch('nova.compute.resource_tracker.ResourceTracker.instance_claim')
     @mock.patch.object(manager.ComputeManager, '_shutdown_instance')
     @mock.patch.object(manager.ComputeManager, '_build_networks_for_instance')
@@ -7730,7 +7825,7 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
     @mock.patch.object(manager.ComputeManager, '_notify_about_instance_usage')
     def test_rescheduled_exception_with_non_ascii_exception(self,
             mock_notify, mock_save, mock_spawn, mock_build, mock_shutdown,
-            mock_claim):
+            mock_claim, mock_share_info):
         exc = exception.NovaException(u's\xe9quence')
 
         mock_build.return_value = self.network_info
@@ -7762,7 +7857,8 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
         mock_spawn.assert_called_once_with(self.context, self.instance,
             test.MatchType(objects.ImageMeta), self.injected_files,
             self.admin_pass, self.allocations, network_info=self.network_info,
-            block_device_info=self.block_device_info, accel_info=[])
+            block_device_info=self.block_device_info, accel_info=[],
+            share_info=mock_share_info.return_value)
 
     @mock.patch.object(manager.ComputeManager, '_build_and_run_instance')
     @mock.patch.object(conductor_api.ComputeTaskAPI, 'build_instances')
@@ -8251,6 +8347,8 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
         self.assertEqual(10, mock_failed.call_count)
         mock_succeeded.assert_not_called()
 
+    @mock.patch('nova.compute.manager.ComputeManager._get_share_info',
+                return_value=nova.objects.ShareMappingList())
     @mock.patch('nova.compute.resource_tracker.ResourceTracker.instance_claim')
     @mock.patch.object(manager.ComputeManager, '_shutdown_instance')
     @mock.patch.object(manager.ComputeManager, '_build_networks_for_instance')
@@ -8259,7 +8357,8 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
     @mock.patch.object(manager.ComputeManager, '_notify_about_instance_usage')
     def _test_instance_exception(self, exc, raised_exc,
                                  mock_notify, mock_save, mock_spawn,
-                                 mock_build, mock_shutdown, mock_claim):
+                                 mock_build, mock_shutdown, mock_claim,
+                                 mock_share_info):
         """This method test the instance related InstanceNotFound
             and reschedule on exception errors. The test cases get from
             arguments.
@@ -8299,7 +8398,8 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
             self.context, self.instance, test.MatchType(objects.ImageMeta),
             self.injected_files, self.admin_pass, self.allocations,
             network_info=self.network_info,
-            block_device_info=self.block_device_info, accel_info=[])
+            block_device_info=self.block_device_info, accel_info=[],
+            share_info=mock_share_info.return_value)
 
     def test_instance_not_found(self):
         got_exc = exception.InstanceNotFound(instance_id=1)
@@ -8393,11 +8493,14 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
                 mock.patch.object(self.compute,
                     '_validate_instance_group_policy'),
                 mock.patch.object(self.compute.rt, 'instance_claim'),
-                mock.patch('nova.compute.utils.notify_about_instance_create')
+                mock.patch('nova.compute.utils.notify_about_instance_create'),
+                mock.patch('nova.compute.manager.'
+                           'ComputeManager._get_share_info',
+                           return_value=nova.objects.ShareMappingList())
         ) as (spawn, save,
                 _build_networks_for_instance, _notify_about_instance_usage,
                 _shutdown_instance, _validate_instance_group_policy,
-                mock_claim, mock_notify):
+                mock_claim, mock_notify, mock_share_info):
 
             self.assertRaises(exception.BuildAbortException,
                     self.compute._build_and_run_instance, self.context,
@@ -8435,7 +8538,8 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
                 test.MatchType(objects.ImageMeta),
                 self.injected_files, self.admin_pass, self.allocations,
                 network_info=self.network_info,
-                block_device_info=self.block_device_info, accel_info=[])])
+                block_device_info=self.block_device_info, accel_info=[],
+                share_info=mock_share_info.return_value)])
 
             _shutdown_instance.assert_called_once_with(self.context,
                     self.instance, self.block_device_mapping,
@@ -9181,8 +9285,12 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
                     '_build_networks_for_instance', return_value=[]),
                 mock.patch.object(self.instance, 'save'),
                 mock.patch.object(self.compute, '_notify_about_instance_usage',
-                    side_effect=fake_notify)
-        ) as (mock_upd, mock_spawn, mock_networks, mock_save, mock_notify):
+                    side_effect=fake_notify),
+                mock.patch('nova.compute.manager.ComputeManager.'
+                           '_get_share_info',
+                            return_value=nova.objects.ShareMappingList())
+        ) as (mock_upd, mock_spawn, mock_networks, mock_save, mock_notify,
+              mock_share_info):
             self.compute._build_and_run_instance(self.context, self.instance,
                     self.image, self.injected_files, self.admin_pass,
                     self.requested_networks, self.security_groups,
@@ -9206,6 +9314,8 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
         self.flags(default_access_ip_network_name='test1')
         instance = fake_instance.fake_db_instance()
 
+        @mock.patch('nova.compute.manager.ComputeManager._get_share_info',
+                   return_value=nova.objects.ShareMappingList())
         @mock.patch.object(self.compute.rt, 'instance_claim')
         @mock.patch.object(db, 'instance_update_and_get_original',
                 return_value=({}, instance))
@@ -9215,7 +9325,7 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
         @mock.patch.object(db, 'instance_extra_update_by_uuid')
         @mock.patch.object(self.compute, '_notify_about_instance_usage')
         def _check_access_ip(mock_notify, mock_extra, mock_networks,
-                mock_spawn, mock_db_update, mock_claim):
+                mock_spawn, mock_db_update, mock_claim, mock_share_info):
             self.compute._build_and_run_instance(self.context, self.instance,
                     self.image, self.injected_files, self.admin_pass,
                     self.requested_networks, self.security_groups,
@@ -9255,8 +9365,12 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
                 mock.patch.object(self.instance, 'save',
                     side_effect=[None, None, exc]),
                 mock.patch.object(self.compute, '_notify_about_instance_usage',
-                    side_effect=fake_notify)
-        ) as (mock_spawn, mock_networks, mock_save, mock_notify):
+                    side_effect=fake_notify),
+                mock.patch('nova.compute.manager.ComputeManager.'
+                           '_get_share_info',
+                       return_value=nova.objects.ShareMappingList())
+        ) as (mock_spawn, mock_networks, mock_save, mock_notify,
+              mock_share_info):
             self.assertRaises(exception.InstanceNotFound,
                     self.compute._build_and_run_instance, self.context,
                     self.instance, self.image, self.injected_files,
@@ -9283,7 +9397,10 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
                 self.compute, '_build_networks_for_instance', return_value=[]),
             mock.patch.object(self.instance, 'save'),
             mock.patch.object(self.compute.rt, 'instance_claim'),
-        ) as (mock_spawn, mock_networks, mock_save, mock_claim):
+            mock.patch('nova.compute.manager.ComputeManager._get_share_info',
+                       return_value=nova.objects.ShareMappingList())
+        ) as (mock_spawn, mock_networks, mock_save, mock_claim,
+              mock_share_info):
             self.compute._build_and_run_instance(
                 self.context,
                 self.instance, self.image, self.injected_files,
@@ -9334,7 +9451,12 @@ class ComputeManagerBuildInstanceTestCase(test.NoDBTestCase):
                 mock.patch('nova.scheduler.client.report.'
                            'SchedulerReportClient._get_resource_provider'),
                 mock.patch.object(self.compute.rt, 'instance_claim'),
-        ) as (mock_spawn, mock_networks, mock_save, mock_get_rp, mock_claim):
+
+                mock.patch('nova.compute.manager.'
+                           'ComputeManager._get_share_info',
+                            return_value=nova.objects.ShareMappingList())
+        ) as (mock_spawn, mock_networks, mock_save, mock_get_rp, mock_claim,
+              mock_share_info):
             mock_get_rp.return_value = {
                 'uuid': uuids.rp1,
                 'name': 'compute1:sriov-agent:ens3'
