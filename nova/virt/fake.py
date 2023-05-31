@@ -189,7 +189,8 @@ class FakeDriver(driver.ComputeDriver):
 
     def spawn(self, context, instance, image_meta, injected_files,
               admin_password, allocations, network_info=None,
-              block_device_info=None, power_on=True, accel_info=None):
+              block_device_info=None, power_on=True, accel_info=None,
+              share_info=None):
 
         if network_info:
             for vif in network_info:
@@ -813,7 +814,8 @@ class FakeRescheduleDriver(FakeDriver):
 
     def spawn(self, context, instance, image_meta, injected_files,
               admin_password, allocations, network_info=None,
-              block_device_info=None, power_on=True, accel_info=None):
+              block_device_info=None, power_on=True, accel_info=None,
+              share_info=None):
         if not self.rescheduled.get(instance.uuid, False):
             # We only reschedule on the first time something hits spawn().
             self.rescheduled[instance.uuid] = True
@@ -837,7 +839,8 @@ class FakeBuildAbortDriver(FakeDriver):
 
     def spawn(self, context, instance, image_meta, injected_files,
               admin_password, allocations, network_info=None,
-              block_device_info=None, power_on=True, accel_info=None):
+              block_device_info=None, power_on=True, accel_info=None,
+              share_info=None):
         raise exception.BuildAbortException(
             instance_uuid=instance.uuid, reason='FakeBuildAbortDriver')
 
@@ -854,7 +857,8 @@ class FakeUnshelveSpawnFailDriver(FakeDriver):
 
     def spawn(self, context, instance, image_meta, injected_files,
               admin_password, allocations, network_info=None,
-              block_device_info=None, power_on=True, accel_info=None):
+              block_device_info=None, power_on=True, accel_info=None,
+              share_info=None):
         if instance.vm_state == vm_states.SHELVED_OFFLOADED:
             raise exception.VirtualInterfaceCreateException(
                 'FakeUnshelveSpawnFailDriver')

@@ -15648,7 +15648,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         self.test_spawn_with_network_info(power_on=False)
 
     @mock.patch('nova.virt.libvirt.blockinfo.get_disk_info')
-    def _test_spawn_accels(self, accel_info, mock_get_disk_info):
+    def _test_spawn_accels(self, accel_info, share_info, mock_get_disk_info):
         mock_get_disk_info.return_value = {'mapping': None}
         self.stub_out('nova.virt.libvirt.driver.LibvirtDriver.'
                       '_create_image', lambda *a, **kw: (False, False))
@@ -15667,7 +15667,8 @@ class LibvirtConnTestCase(test.NoDBTestCase,
         drvr = libvirt_driver.LibvirtDriver(fake.FakeVirtAPI(), False)
 
         drvr.spawn(self.context, instance, image_meta, [], None, {},
-                   accel_info=accel_info, power_on=False)
+                   accel_info=accel_info, power_on=False,
+                   share_info=share_info)
         return instance
 
     @mock.patch.object(libvirt_driver.LibvirtDriver,
@@ -15677,11 +15678,12 @@ class LibvirtConnTestCase(test.NoDBTestCase,
     def test_spawn_accels_no_accel_info(self, mock_get_guest_xml):
         # accel_info should be passed to get_guest_xml even if it is []
         accel_info = []
-        instance = self._test_spawn_accels(accel_info)
+        share_info = objects.ShareMappingList()
+        instance = self._test_spawn_accels(accel_info, share_info)
         mock_get_guest_xml.assert_called_once_with(
             self.context, instance, mock.ANY, mock.ANY, mock.ANY,
             block_device_info=None, mdevs=mock.ANY,
-            accel_info=[])
+            accel_info=[], share_info=share_info)
 
     @mock.patch.object(libvirt_driver.LibvirtDriver,
                        '_register_undefined_instance_details',
@@ -15690,11 +15692,12 @@ class LibvirtConnTestCase(test.NoDBTestCase,
     def test_spawn_accels_with_accel_info(self, mock_get_guest_xml):
         # accel_info should be passed to get_guest_xml if it is not []
         accel_info = nova_fixtures.CyborgFixture.bound_arq_list
-        instance = self._test_spawn_accels(accel_info)
+        share_info = objects.ShareMappingList()
+        instance = self._test_spawn_accels(accel_info, share_info)
         mock_get_guest_xml.assert_called_once_with(
             self.context, instance, mock.ANY, mock.ANY, mock.ANY,
             block_device_info=None, mdevs=mock.ANY,
-            accel_info=accel_info)
+            accel_info=accel_info, share_info=share_info)
 
     @mock.patch.object(libvirt_driver.LibvirtDriver,
                        '_register_undefined_instance_details',

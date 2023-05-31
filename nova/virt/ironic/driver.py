@@ -1124,7 +1124,8 @@ class IronicDriver(virt_driver.ComputeDriver):
 
     def spawn(self, context, instance, image_meta, injected_files,
               admin_password, allocations, network_info=None,
-              block_device_info=None, power_on=True, accel_info=None):
+              block_device_info=None, power_on=True, accel_info=None,
+              share_info=None):
         """Deploy an instance.
 
         :param context: The security context.
@@ -1144,6 +1145,8 @@ class IronicDriver(virt_driver.ComputeDriver):
         :param arqs: Accelerator requests for this instance.
         :param power_on: True if the instance should be powered on, False
                          otherwise
+        :param nova.objects.share_mapping.ShareMapingList share_info
+            optional list of share_mapping
         """
         LOG.debug('Spawn called for instance', instance=instance)
 
