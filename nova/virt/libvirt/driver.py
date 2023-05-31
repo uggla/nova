@@ -4419,7 +4419,11 @@ class LibvirtDriver(driver.ComputeDriver):
 
     def spawn(self, context, instance, image_meta, injected_files,
               admin_password, allocations, network_info=None,
-              block_device_info=None, power_on=True, accel_info=None):
+              block_device_info=None, power_on=True, accel_info=None,
+              share_info=None):
+        if share_info is None:
+            share_info = objects.ShareMappingList()
+
         disk_info = blockinfo.get_disk_info(CONF.libvirt.virt_type,
                                             instance,
                                             image_meta,
@@ -4456,7 +4460,8 @@ class LibvirtDriver(driver.ComputeDriver):
         xml = self._get_guest_xml(context, instance, network_info,
                                   disk_info, image_meta,
                                   block_device_info=block_device_info,
-                                  mdevs=mdevs, accel_info=accel_info)
+                                  mdevs=mdevs, accel_info=accel_info,
+                                  share_info=share_info)
         self._create_guest_with_network(
             context, xml, instance, network_info, block_device_info,
             post_xml_callback=gen_confdrive,

@@ -414,7 +414,8 @@ class ComputeDriver(object):
 
     def spawn(self, context, instance, image_meta, injected_files,
               admin_password, allocations, network_info=None,
-              block_device_info=None, power_on=True, accel_info=None):
+              block_device_info=None, power_on=True, accel_info=None,
+              share_info=None):
         """Create a new instance/VM/domain on the virtualization platform.
 
         Once this successfully completes, the instance should be
@@ -457,6 +458,8 @@ class ComputeDriver(object):
              }
             ]
             Also doc'd in nova/accelerator/cyborg.py::get_arqs_for_instance()
+        :param nova.objects.share_mapping.ShareMapingList share_info
+            optional list of share_mapping
         """
         raise NotImplementedError()
 
@@ -517,6 +520,8 @@ class ComputeDriver(object):
             encountered
         :param accel_info: List of accelerator request dicts. The exact
             data struct is doc'd in nova/virt/driver.py::spawn().
+        :param nova.objects.share_mapping.ShareMapingList share_info
+            optional list of share_mapping
         """
         raise NotImplementedError()
 
