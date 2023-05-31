@@ -55,6 +55,7 @@ from oslo_utils import excutils
 from oslo_utils import strutils
 from oslo_utils import timeutils
 from oslo_utils import units
+from oslo_utils import uuidutils
 
 from nova.accelerator import cyborg
 from nova import block_device
@@ -4194,10 +4195,83 @@ class ComputeManager(manager.Manager):
 
     def _get_share_info(self, context, instance):
         share_mappings = []
-        # Filter share_mapping in error to allow VM to start.
+
+        # Algo:
+        # 1. Do we have a local share ?
+        # 2. Does this instance need a local share ?
+        # 3. So we have 4 cases:
+        # +-------+----------+-----------------------------------+
+        # | Local | Local    | Actions                           |
+        # | share | share    |                                   |
+        # |       | required |                                   |
+        # +-------+----------+-----------------------------------+
+        # | no    | no       | Do nothing                        |
+        # |       |          | Get the list of share_mapping     |
+        # +-------+----------+-----------------------------------+
+        # | no    | yes      | Create a "local" share            |
+        # |       |          | Get the list of share_mapping     |
+        # |       |          | that will include the created one |
+        # +-------+----------+-----------------------------------+
+        # | yes   | no       | Delete the "local" share          |
+        # |       |          | Get the list of share_mapping,    |
+        # |       |          | local share should no be included |
+        # |       |          | anymore                           |
+        # +-------+----------+-----------------------------------+
+        # | yes   | yes      | Do nothing                        |
+        # |       |          | Get the list of share_mapping,    |
+        # |       |          | local share will be included.     |
+        # +-------+----------+-----------------------------------+
+        def is_local_share_required():
+            try:
+                # We may have issues to retrieve instance properties, if the
+                # instance is partialy deleted
+                image_metadata = objects.ImageMeta.from_instance(instance)
+                share_local_extra_spec = instance.flavor.extra_specs.get(
+                    "hw:share_local_fs"
+                )
+                share_local_image_property = image_metadata.properties.get(
+                    "hw_share_local_fs"
+                )
+
+            except exception.InstanceNotFound:
+                share_local_extra_spec = False
+                share_local_image_property = False
+
+            if (share_local_extra_spec or share_local_image_property):
+                return True
+            return False
+
+        local_share = objects.ShareMapping.get_local_share_by_instance_uuid(
+            context, instance.uuid
+        )
+
+        local_share_required = is_local_share_required()
+
+        if local_share is None and local_share_required:
+            # Create the local share
+            local_share_conf = jsonutils.loads(CONF.share_local_fs)
+            fs = next(iter(local_share_conf))
+            tag = local_share_conf[fs]
+
+            local_share = objects.ShareMapping(context)
+            local_share.uuid = uuidutils.generate_uuid()
+            local_share.instance_uuid = instance.uuid
+            local_share.share_id = uuidutils.generate_uuid()
+            local_share.status = fields.ShareMappingStatus.INACTIVE
+            local_share.tag = tag
+            local_share.export_location = fs
+            local_share.share_proto = fields.ShareMappingProto.LOCAL
+
+            local_share.create()
+
+        if local_share and not local_share_required:
+            # Delete local share because it's no longer required
+            local_share.delete()
+
         for share_mapping in objects.ShareMappingList.get_by_instance_uuid(
             context, instance.uuid
         ):
+            # Filter share_mapping in error to allow VM to start.
             if share_mapping.status == fields.ShareMappingStatus.ERROR:
                 LOG.warning(
                     "Share id '%s' attached to server id '%s' is in "
