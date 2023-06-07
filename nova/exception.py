@@ -179,6 +179,19 @@ class ForbiddenWithAccelerators(NotSupported):
     msg_fmt = _("Feature not supported with instances that have accelerators.")
 
 
+class ForbiddenSharesNotSupported(NotSupported):
+    msg_fmt = _("Feature not supported until computes have not been updated.")
+
+
+class ForbiddenSharesNotConfiguredCorrectly(NotSupported):
+    msg_fmt = _("Feature not supported because either compute or instance "
+                "are not configured correctly.")
+
+
+class ForbiddenWithShare(NotSupported):
+    msg_fmt = _("Feature not supported with instances that have shares.")
+
+
 class ForbiddenPortsWithAccelerator(NotSupported):
     msg_fmt = _("Feature not supported with Ports that have accelerators.")
 
