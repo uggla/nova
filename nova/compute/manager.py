@@ -4632,7 +4632,7 @@ class ComputeManager(manager.Manager):
                 # self.manila_api.lock(share_mapping.share_id)
                 # Explicitly locking the share is not needed as
                 # create_access_rule() from the sdk will do it if the
-                # restrict_visibility and restrict_deletion flags are passed
+                # lock_visibility and lock_deletion flags are passed
                 self.manila_api.allow(
                     share_mapping.share_id, access_type, access_to, "rw"
                 )
