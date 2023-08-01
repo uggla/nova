@@ -88,6 +88,21 @@ def from_manila_access(manila_access):
     return Access(manila_access)
 
 
+class Lock():
+
+    def __init__(self, manila_lock):
+        self.id = manila_lock.id
+        self.project_id = manila_lock.project_id
+        self.resource_type = manila_lock.resource_type
+        self.resource_id = manila_lock.resource_id
+        self.resource_action = manila_lock.resource_action
+        self.lock_reason = manila_lock.lock_reason
+
+
+def from_manila_lock(manila_lock):
+    return Lock(manila_lock)
+
+
 def translate_sdk_exception(method):
     """Transforms a manila exception but keeps its traceback intact."""
     @functools.wraps(method)
@@ -152,6 +167,34 @@ def translate_deny_exception(method):
     return translate_sdk_exception(wrapper)
 
 
+def translate_lock_exception(method):
+    """Transforms the exception for lock but keeps its traceback intact.
+    """
+
+    def wrapper(self, share_id, *args, **kwargs):
+        try:
+            res = method(self, share_id, *args, **kwargs)
+        except (sdk_exc.BadRequestException) as exc:
+            raise exception.ShareLockError(
+                share_id=share_id, reason=exc) from exc
+        return res
+    return translate_sdk_exception(wrapper)
+
+
+def translate_unlock_exception(method):
+    """Transforms the exception for unlock but keeps its traceback intact.
+    """
+
+    def wrapper(self, share_id, *args, **kwargs):
+        try:
+            res = method(self, share_id, *args, **kwargs)
+        except (sdk_exc.BadRequestException) as exc:
+            raise exception.ShareUnlockError(
+                share_id=share_id, reason=exc) from exc
+        return res
+    return translate_sdk_exception(wrapper)
+
+
 class API(object):
     """API for interacting with the share manager."""
 
@@ -183,12 +226,7 @@ class API(object):
         return from_manila_share(share, export_location)
 
     @translate_share_exception
-    def get_access(
-        self,
-        share_id,
-        access_type,
-        access_to,
-    ):
+    def get_access(self, share_id, access_type, access_to):
         """Get share access
 
         :param share_id: the id of the share to get
@@ -212,13 +250,7 @@ class API(object):
         return None
 
     @translate_allow_exception
-    def allow(
-        self,
-        share_id,
-        access_type,
-        access_to,
-        access_level,
-    ):
+    def allow(self, share_id, access_type, access_to, access_level):
         """Allow share access
 
         :param share_id: the id of the share
@@ -251,6 +283,8 @@ class API(object):
                 access_type=access_type,
                 access_to=access_to,
                 access_level=access_level,
+                restrict_visibility=True,
+                restrict_deletion=True
             )
         )
 
@@ -260,12 +294,7 @@ class API(object):
         return access
 
     @translate_deny_exception
-    def deny(
-        self,
-        share_id,
-        access_type,
-        access_to,
-    ):
+    def deny(self, share_id, access_type, access_to):
         """Deny share access
         :param share_id: the id of the share
         :param access_type: the type of access ("ip", "cert", "user")
@@ -286,10 +315,83 @@ class API(object):
 
         if access:
             LOG.debug("Deny host access to share id:'%s'", share_id)
-            resp = client.delete_access_rule(access.id, share_id)
+            resp = client.delete_access_rule(
+                access.id, share_id, unrestrict=True
+            )
             if resp.status_code != 202:
                 raise exception.ShareAccessRemovalError(
                     share_id=share_id, reason=resp.reason
                 )
         else:
             raise exception.ShareAccessNotFound(share_id=share_id)
+
+    def get_lock(self, share_id):
+        """Get share lock
+
+        :param share_id: the id of the share to get
+        :returns: lock object or None if there is no lock granted to this
+            share.
+        """
+
+        LOG.debug("Get share lock id for share id:'%s'",
+                  share_id)
+        lock_list = []
+        lock_generator = manilaclient().get_all_resource_locks(
+            resource_id=share_id
+        )
+
+        for lock in lock_generator:
+            if (
+                lock.resource_type == 'share' and
+                lock.lock_reason == 'nova lock'
+            ):
+                lock_list.append(lock)
+
+        if lock_list:
+            # Ensure that a share is only locked once by Nova
+            assert len(lock_list) == 1
+            return from_manila_lock(lock_list[0])
+        return None
+
+    @translate_lock_exception
+    def lock(self, share_id,):
+        """Lock share
+        :param share_id: the id of the share
+        :raises: ShareLockError if the manila lock API does not
+            respond with a status code 202.
+        :raises: ShareLockAlreadyExists if the lock is already present.
+        """
+
+        lock = self.get_lock(share_id)
+
+        if not lock:
+            LOG.debug("Lock share id:'%s'", share_id)
+            lock = from_manila_lock(
+                manilaclient().create_resource_lock(
+                    resource_id=share_id,
+                    resource_type="share",
+                    lock_reason="nova lock",
+                )
+            )
+            return lock
+        raise exception.ShareLockAlreadyExists(share_id=share_id)
+
+    @translate_unlock_exception
+    def unlock(self, share_id,):
+        """Unlock share
+        :param share_id: the id of the share
+        :raises: ShareLockNotFound if the access_id specified is not
+            available.
+        :raises: ShareUnlockError if the manila unlock API does not
+            respond with a status code 202.
+        """
+
+        lock = self.get_lock(share_id)
+
+        if not lock:
+            raise exception.ShareLockNotFound(share_id=share_id)
+
+        LOG.debug("Unlock share id:'%s'", share_id)
+        resp = manilaclient().delete_resource_lock(lock.id)
+
+        return resp

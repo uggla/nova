@@ -771,6 +771,29 @@ class ShareAccessRemovalError(NovaException):
                 "Reason: %(reason)s.")
 
 
+class ShareLockNotFound(NovaException):
+    msg_fmt = _("Share lock can not be found for "
+                "share id %(share_id)s.\n")
+
+
+class ShareLockError(NovaException):
+    msg_fmt = _("Share lock can not be acquired from "
+                "share id %(share_id)s.\n"
+                "Reason: %(reason)s.")
+
+
+class ShareLockAlreadyExists(NovaException):
+    msg_fmt = _("Share lock can not be acquired from "
+                "share id %(share_id)s.\n"
+                "Reason: lock already exists.")
+
+
+class ShareUnlockError(NovaException):
+    msg_fmt = _("Share can not be unlocked from "
+                "share id %(share_id)s.\n"
+                "Reason: %(reason)s.")
+
+
 class VolumeTypeNotFound(NotFound):
     msg_fmt = _("Volume type %(id_or_name)s could not be found.")
 

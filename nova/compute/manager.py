@@ -4533,6 +4533,10 @@ class ComputeManager(manager.Manager):
             )
 
             if not check_access():
+                # self.manila_api.lock(share_mapping.share_id)
+                # Explicitly locking the share is not needed as
+                # create_access_rule() from the sdk will do it if the
+                # restrict_visibility and restrict_deletion flags are passed
                 self.manila_api.allow(
                     share_mapping.share_id,
                     access_type,
@@ -4584,6 +4588,10 @@ class ComputeManager(manager.Manager):
             )
 
             if not still_used:
+                # self.manila_api.unlock(share_mapping.share_id)
+                # Explicit unlocking the share is not needed as
+                # delete_access_rule() from the sdk will do it if the
+                # unrestrict parameter is passed
                 self.manila_api.deny(
                     share_mapping.share_id,
                     access_type,

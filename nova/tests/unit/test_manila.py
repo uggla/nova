@@ -21,7 +21,12 @@ from nova.share import manila
 from nova import test
 
 from openstack import exceptions as sdk_exc
-from openstack.shared_file_system.v2.share import Share as SdkShare
+from openstack.shared_file_system.v2.resource_locks import (
+    ResourceLock as SdkResourceLock
+)
+from openstack.shared_file_system.v2.share import (
+    Share as SdkShare
+)
 from openstack.shared_file_system.v2.share_access_rule import (
     ShareAccessRule as SdkAccessRule
 )
@@ -144,6 +149,42 @@ def stub_access():
     return access
 
 
+def stub_lock(share_id):
+    lock = SdkResourceLock()
+    lock.id = "a37b7da7-5d72-49d3-bf3b-aebd64828089"
+    lock.project_id = "ded249b25f6f46918fef4e69f427590c"
+    lock.resource_type = "share"
+    lock.resource_id = share_id
+    lock.resource_action = "delete"
+    lock.lock_reason = "nova lock"
+    lock.created_at = "2023-07-31T09:39:38.441320"
+    lock.updated_at = None
+    lock.location = Munch(
+        {
+            "cloud": "envvars",
+            "region_name": "RegionOne",
+            "zone": None,
+            "project": Munch(
+                {
+                    "id": "bce4fcc3bd0d4c598f610cb45ec5c5ba",
+                    "name": "demo",
+                    "domain_id": "default",
+                    "domain_name": None,
+                }
+            ),
+        }
+    )
+    return lock
+
+
+def stub_resource_locks(share_id):
+    resource_locks = []
+    resource_lock = stub_lock(share_id)
+    resource_locks.append(resource_lock)
+    for lock in resource_locks:
+        yield lock
+
+
 class BaseManilaTestCase(object):
 
     def setUp(self):
@@ -197,13 +238,32 @@ class BaseManilaTestCase(object):
                     raise sdk_exc.BadRequestException
                 return stub_access()
 
-            def delete_access_rule(self, access_id, share_id):
+            def delete_access_rule(self, access_id, share_id, unrestrict):
                 res = Response()
                 res.status_code = 202
                 res.reason = "Internal error"
                 if share_id == '2345':
                     res.status_code = 500
                 return res
+
+            def get_all_resource_locks(self, resource_id=None):
+                if resource_id == '1234':
+                    return []
+                if resource_id == '2345':
+                    return []
+                if resource_id == 'nonexisting':
+                    return []
+                return stub_resource_locks(resource_id)
+
+            def create_resource_lock(
+                self, resource_id=None, resource_type=None, lock_reason=None
+            ):
+                if resource_id == "nonexisting":
+                    raise sdk_exc.BadRequestException
+                return stub_lock(resource_id)
+
+            def delete_resource_lock(self, share_id):
+                pass
 
         return FakeConnection()
 
@@ -349,3 +409,80 @@ class ManilaTestCase(BaseManilaTestCase, test.NoDBTestCase):
         self.assertEqual(
             404,
             exc.code)
+
+    def test_get_lock(self):
+        """Tests that we manage to get an lock id based on lock_type and
+        lock_to parameters.
+        """
+        lock = self.api.get_lock('4567')
+
+        self.assertEqual('a37b7da7-5d72-49d3-bf3b-aebd64828089', lock.id)
+        self.assertEqual('ded249b25f6f46918fef4e69f427590c', lock.project_id)
+        self.assertEqual('share', lock.resource_type)
+        self.assertEqual('4567', lock.resource_id)
+        self.assertEqual('delete', lock.resource_action)
+        self.assertEqual('nova lock', lock.lock_reason)
+
+    def test_get_lock_not_existing(self):
+        """Tests that we get None if the lock id does not exist.
+        """
+        lock = self.api.get_lock('2345')
+
+        self.assertIsNone(lock)
+
+    def test_create_lock(self):
+        """Tests that we manage to create a lock to a share.
+        """
+        lock = self.api.lock('1234')
+        self.assertEqual('a37b7da7-5d72-49d3-bf3b-aebd64828089', lock.id)
+        self.assertEqual('ded249b25f6f46918fef4e69f427590c', lock.project_id)
+        self.assertEqual('share', lock.resource_type)
+        self.assertEqual('1234', lock.resource_id)
+        self.assertEqual('delete', lock.resource_action)
+        self.assertEqual('nova lock', lock.lock_reason)
+
+    def test_create_lock_fails_incorect_resource_id(self):
+        """Tests that we have an exception is the share already exists.
+        """
+        self.assertRaises(
+            exception.ShareLockError, self.api.lock, "nonexisting"
+        )
+
+    def test_create_lock_fails_already_exists(self):
+        """Tests that we have an exception is the lock already exists.
+        """
+        exc = self.assertRaises(
+            exception.ShareLockAlreadyExists,
+            self.api.lock,
+            '4567',
+        )
+
+        self.assertIn("Share lock can not be acquired", exc.message)
+
+    def test_delete_lock(self):
+        """Tests that we manage to unlock a share.
+        """
+        self.api.unlock(
+            '4567',
+        )
+
+    # def test_delete_lock_fails(self):
+    #     """Tests that we fail if something wrong happens calling unlock
+    #     method.
+    #     """
+    #     exc = self.assertRaises(exception.ShareUnlockError,
+    #             self.api.unlock,
+    #             '1234',
+    #             )
+
+    def test_delete_lock_fails_not_found(self):
+        """Tests that we fail if lock is missing.
+        """
+        exc = self.assertRaises(exception.ShareLockNotFound,
+                self.api.unlock,
+                '1234',
+                )
+
+        self.assertIn(
+            'Share lock can not be found',
+            exc.message)
