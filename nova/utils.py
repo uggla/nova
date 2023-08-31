@@ -31,6 +31,7 @@ import tempfile
 import eventlet
 from eventlet import tpool
 from keystoneauth1 import loading as ks_loading
+from keystoneauth1 import service_token
 import netaddr
 from openstack import connection
 from openstack import exceptions as sdk_exc
@@ -79,6 +80,8 @@ SM_SKIP_KEYS = (
 _FILE_CACHE = {}
 
 _SERVICE_TYPES = service_types.ServiceTypes()
+
+_SERVICE_AUTH = None
 
 
 # NOTE(mikal): this seems to have to stay for now to handle os-brick
@@ -903,13 +906,37 @@ def _get_auth_and_session(confgrp, ksa_auth=None, ksa_session=None):
         if ksa_session and ksa_session.auth:
             ksa_auth = ksa_session.auth
         else:
-            ksa_auth = ks_loading.load_auth_from_conf_options(CONF, confgrp)
+            # We need to check if a service token is required
+            # ksa_auth = ks_loading.load_auth_from_conf_options(CONF, confgrp)
+            ksa_auth = _get_auth_plugin(confgrp)
 
     if not ksa_session:
         ksa_session = ks_loading.load_session_from_conf_options(
             CONF, confgrp, auth=ksa_auth)
 
     return ksa_auth, ksa_session
+
+
+def _get_auth_plugin(confgrp):
+    if CONF.service_user.send_service_user_token:
+        global _SERVICE_AUTH
+        if not _SERVICE_AUTH:
+            _SERVICE_AUTH = ks_loading.load_auth_from_conf_options(
+                                CONF,
+                                group=
+                                nova.conf.service_token.SERVICE_USER_GROUP)
+            if _SERVICE_AUTH is None:
+                # This indicates a misconfiguration so log a warning and
+                # return the user_auth.
+                LOG.warning('Unable to load auth from [service_user] '
+                            'configuration. Ensure "auth_type" is set.')
+                return ks_loading.load_auth_from_conf_options(CONF, confgrp)
+        return service_token.ServiceTokenAuthWrapper(
+            user_auth=ks_loading.load_auth_from_conf_options(CONF, confgrp),
+            service_auth=_SERVICE_AUTH,
+        )
+
+    return ks_loading.load_auth_from_conf_options(CONF, confgrp)
 
 
 def get_ksa_adapter(service_type, ksa_auth=None, ksa_session=None,
