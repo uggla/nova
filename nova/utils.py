@@ -918,7 +918,9 @@ def _get_auth_and_session(confgrp, ksa_auth=None, ksa_session=None):
 
 
 def _get_auth_plugin(confgrp):
-    if CONF.service_user.send_service_user_token:
+    user_auth = ks_loading.load_auth_from_conf_options(CONF, confgrp)
+
+    if CONF.service_user.send_service_user_token and confgrp != 'placement':
         global _SERVICE_AUTH
         if not _SERVICE_AUTH:
             _SERVICE_AUTH = ks_loading.load_auth_from_conf_options(
@@ -930,13 +932,13 @@ def _get_auth_plugin(confgrp):
                 # return the user_auth.
                 LOG.warning('Unable to load auth from [service_user] '
                             'configuration. Ensure "auth_type" is set.')
-                return ks_loading.load_auth_from_conf_options(CONF, confgrp)
+                return user_auth
         return service_token.ServiceTokenAuthWrapper(
-            user_auth=ks_loading.load_auth_from_conf_options(CONF, confgrp),
+            user_auth=user_auth,
             service_auth=_SERVICE_AUTH,
         )
 
-    return ks_loading.load_auth_from_conf_options(CONF, confgrp)
+    return user_auth
 
 
 def get_ksa_adapter(service_type, ksa_auth=None, ksa_session=None,
