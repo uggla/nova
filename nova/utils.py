@@ -81,11 +81,10 @@ _FILE_CACHE = {}
 
 _SERVICE_TYPES = service_types.ServiceTypes()
 
-_SERVICE_AUTH = None
-
-
 # NOTE(mikal): this seems to have to stay for now to handle os-brick
 # requirements. This makes me a sad panda.
+
+
 def get_root_helper():
     if CONF.workarounds.disable_rootwrap:
         cmd = 'sudo'
@@ -907,8 +906,16 @@ def _get_auth_and_session(confgrp, ksa_auth=None, ksa_session=None):
             ksa_auth = ksa_session.auth
         else:
             # We need to check if a service token is required
-            # ksa_auth = ks_loading.load_auth_from_conf_options(CONF, confgrp)
-            ksa_auth = _get_auth_plugin(confgrp)
+            import pdb
+            pdb.set_trace()
+            ksa_auth = ks_loading.load_auth_from_conf_options(CONF, confgrp)
+
+            service_auth = ks_loading.load_auth_from_conf_options(
+                CONF, 'service_user')
+            ksa_auth = service_token.ServiceTokenAuthWrapper(
+                ksa_auth, service_auth)
+
+            #ksa_auth = _get_auth_plugin(confgrp)
 
     if not ksa_session:
         ksa_session = ks_loading.load_session_from_conf_options(
@@ -919,23 +926,24 @@ def _get_auth_and_session(confgrp, ksa_auth=None, ksa_session=None):
 
 def _get_auth_plugin(confgrp):
     user_auth = ks_loading.load_auth_from_conf_options(CONF, confgrp)
+    service_auth = None
 
     if CONF.service_user.send_service_user_token and confgrp != 'placement':
-        global _SERVICE_AUTH
-        if not _SERVICE_AUTH:
-            _SERVICE_AUTH = ks_loading.load_auth_from_conf_options(
-                                CONF,
-                                group=
-                                nova.conf.service_token.SERVICE_USER_GROUP)
-            if _SERVICE_AUTH is None:
-                # This indicates a misconfiguration so log a warning and
-                # return the user_auth.
-                LOG.warning('Unable to load auth from [service_user] '
-                            'configuration. Ensure "auth_type" is set.')
-                return user_auth
+        # if CONF.service_user.send_service_user_token:
+        # if not CONF.service_user.send_service_user_token:
+        service_auth = ks_loading.load_auth_from_conf_options(
+                            CONF,
+                            group=
+                            nova.conf.service_token.SERVICE_USER_GROUP)
+        if service_auth is None:
+            # This indicates a misconfiguration so log a warning and
+            # return the user_auth.
+            LOG.warning('Unable to load auth from [service_user] '
+                       'configuration. Ensure "auth_type" is set.')
+            return user_auth
         return service_token.ServiceTokenAuthWrapper(
-            user_auth=user_auth,
-            service_auth=_SERVICE_AUTH,
+               user_auth=user_auth,
+               service_auth=service_auth,
         )
 
     return user_auth
@@ -1002,10 +1010,15 @@ def get_sdk_adapter(service_type, check_service=False):
     """
     confgrp = _get_conf_group(service_type)
     sess = _get_auth_and_session(confgrp)[1]
+    #import pdb; pdb.set_trace()
     try:
+        import openstack
+        openstack.enable_logging(debug=True)
         conn = connection.Connection(
             session=sess, oslo_conf=CONF, service_types={service_type},
             strict_proxies=check_service)
+        import pdb
+        pdb.set_trace()
     except sdk_exc.ServiceDiscoveryException as e:
         raise exception.ServiceUnavailable(
             _("The %(service_type)s service is unavailable: %(error)s") %

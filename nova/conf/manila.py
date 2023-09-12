@@ -105,6 +105,10 @@ def register_opts(conf):
 
     confutils.register_ksa_opts(conf, manila_group, DEFAULT_SERVICE_TYPE)
 
+    service_group = cfg.OptGroup('service_user')
+    ks_loading.register_session_conf_options(conf, service_group)
+    ks_loading.register_auth_conf_options(conf, service_group)
+
 
 def list_opts():
     return {
