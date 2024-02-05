@@ -52,7 +52,7 @@ class ShareMapping(base.NovaTimestampObject, base.NovaObject):
 
     def create(self):
         LOG.info(
-            "Associate share '%s' to instance '%s'.",
+            "Attaching share '%s' to instance '%s'.",
             self.share_id, self.instance_uuid)
 
         self.save()
@@ -60,7 +60,7 @@ class ShareMapping(base.NovaTimestampObject, base.NovaObject):
     @base.remotable
     def delete(self):
         LOG.info(
-            "Dissociate share '%s' from instance '%s'.",
+            "Detaching share '%s' from instance '%s'.",
             self.share_id,
             self.instance_uuid,
         )
@@ -68,17 +68,17 @@ class ShareMapping(base.NovaTimestampObject, base.NovaObject):
             self._context, self.instance_uuid, self.share_id
         )
 
-    def attach(self):
+    def activate(self):
         LOG.info(
-            "Share '%s' about to be attached to instance '%s'.",
+            "Share '%s' about to be activated to instance '%s'.",
             self.share_id, self.instance_uuid)
 
         self.status = fields.ShareMappingStatus.ACTIVE
         self.save()
 
-    def detach(self):
+    def deactivate(self):
         LOG.info(
-            "Share '%s' about to be detached from instance '%s'.",
+            "Share '%s' about to be deactivated from instance '%s'.",
             self.share_id,
             self.instance_uuid,
         )
@@ -135,10 +135,10 @@ class ShareMappingList(base.ObjectListBase, base.NovaObject):
         return base.obj_make_list(
             context, cls(context), ShareMapping, db_share_mappings)
 
-    def attach_all(self):
+    def activate_all(self):
         for share in self:
-            share.attach()
+            share.activate()
 
-    def detach_all(self):
+    def deactivate_all(self):
         for share in self:
-            share.detach()
+            share.deactivate()
