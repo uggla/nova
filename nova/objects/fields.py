@@ -529,11 +529,12 @@ class RNGModel(BaseNovaEnum):
 class ShareMappingStatus(BaseNovaEnum):
     """Represents the possible status of a share mapping"""
 
+    ATTACHING = "attaching"
     ACTIVE = "active"
     INACTIVE = "inactive"
     ERROR = "error"
 
-    ALL = (ACTIVE, INACTIVE, ERROR)
+    ALL = (ATTACHING, ACTIVE, INACTIVE, ERROR)
 
 
 class ShareMappingProto(BaseNovaEnum):
