@@ -3475,7 +3475,7 @@ class LimitsCommands():
         #
         # The configured user needs 'role:admin and system_scope:all' by
         # default in order to create limits in Keystone.
-        keystone_api = utils.get_sdk_adapter('identity')
+        keystone_api = utils.get_sdk_adapter('identity', admin=True)
 
         # Service ID is required in unified limits APIs.
         service_id = keystone_api.find_service('nova').id
