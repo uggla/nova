@@ -2459,6 +2459,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             ),
         ])
 
+    @mock.patch.object(db, 'instance_fault_create')
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
         return_value=None
@@ -2467,7 +2468,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     def test_allow_share_fails_share_grant_failure(
-        self, mock_db, mock_get_access, mock_allow, mock_notifications
+        self, mock_db, mock_get_access, mock_allow, mock_notifications,
+        mock_instance_fault_create
     ):
         self.flags(shutdown_retry_interval=20, group='compute')
         instance = fake_instance.fake_instance_obj(
@@ -2476,6 +2478,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                 vm_state=vm_states.ACTIVE,
                 task_state=task_states.POWERING_OFF)
         mock_get_access.side_effect = [None, self.get_fake_share_access()]
+        mock_instance_fault_create.return_value = (
+            test_instance_fault.fake_faults['fake-uuid'][0])
         # Ensure CONF.my_shared_fs_storage_ip default is my_ip
         self.flags(my_ip="10.0.0.2")
         self.assertEqual(CONF.my_shared_fs_storage_ip, '10.0.0.2')
@@ -2525,6 +2529,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             ),
         ])
 
+    @mock.patch('nova.compute.utils.add_instance_fault_from_exc')
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
         return_value=None
@@ -2533,7 +2538,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     def test_allow_share_fails_share_not_found(
-        self, mock_db, mock_get_access, mock_allow, mock_notifications
+        self, mock_db, mock_get_access, mock_allow, mock_notifications,
+            mock_instance_fault
     ):
         self.flags(shutdown_retry_interval=20, group='compute')
         instance = fake_instance.fake_instance_obj(
@@ -2553,7 +2559,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_allow.side_effect = exception.ShareNotFound(
             share_id=share_mapping.share_id
         )
-        self.assertRaises(
+        exc = self.assertRaises(
             exception.ShareNotFound,
             self.compute.allow_share,
             self.context,
@@ -2565,6 +2571,14 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_allow.assert_called_once_with(
             mock.ANY, share_mapping.share_id, 'ip', compute_ip, 'rw')
 
+        mock_instance_fault.assert_called_once_with(
+            mock.ANY,
+            instance,
+            exc,
+            mock.ANY
+        )
+
+    @mock.patch('nova.compute.utils.add_instance_fault_from_exc')
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
         return_value=None
@@ -2573,7 +2587,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     def test_allow_share_fails_share_access_grant_error(
-        self, mock_db, mock_get_access, mock_allow, mock_notifications
+        self, mock_db, mock_get_access, mock_allow, mock_notifications,
+            mock_instance_fault
     ):
         self.flags(shutdown_retry_interval=20, group='compute')
         instance = fake_instance.fake_instance_obj(
@@ -2594,7 +2609,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             share_id=share_mapping.share_id,
             reason="fake_reason"
         )
-        self.assertRaises(
+        exc = self.assertRaises(
             exception.ShareAccessGrantError,
             self.compute.allow_share,
             self.context,
@@ -2606,6 +2621,14 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_allow.assert_called_once_with(
             mock.ANY, share_mapping.share_id, 'ip', compute_ip, 'rw')
 
+        mock_instance_fault.assert_called_once_with(
+            mock.ANY,
+            instance,
+            exc,
+            mock.ANY
+        )
+
+    @mock.patch('nova.compute.utils.add_instance_fault_from_exc')
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
         return_value=None
@@ -2614,7 +2637,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     def test_allow_share_fails_bad_request_exception(
-        self, mock_db, mock_get_access, mock_allow, mock_notifications
+        self, mock_db, mock_get_access, mock_allow, mock_notifications,
+            mock_instance_fault
     ):
         self.flags(shutdown_retry_interval=20, group='compute')
         instance = fake_instance.fake_instance_obj(
@@ -2632,7 +2656,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         self.assertEqual(compute_ip, '192.168.0.1')
         share_mapping = self.get_fake_share_mapping()
         mock_allow.side_effect = sdk_exc.BadRequestException()
-        self.assertRaises(
+        exc = self.assertRaises(
             sdk_exc.BadRequestException,
             self.compute.allow_share,
             self.context,
@@ -2644,6 +2668,14 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_allow.assert_called_once_with(
             mock.ANY, share_mapping.share_id, 'ip', compute_ip, 'rw')
 
+        mock_instance_fault.assert_called_once_with(
+            mock.ANY,
+            instance,
+            exc,
+            mock.ANY
+        )
+
+    @mock.patch('nova.compute.utils.add_instance_fault_from_exc')
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
         return_value=None
@@ -2652,7 +2684,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     def test_allow_share_fails_keystone_exception(
-        self, mock_db, mock_get_access, mock_allow, mock_notifications
+        self, mock_db, mock_get_access, mock_allow, mock_notifications,
+            mock_instance_fault
     ):
         self.flags(shutdown_retry_interval=20, group='compute')
         instance = fake_instance.fake_instance_obj(
@@ -2672,7 +2705,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_allow.side_effect = keystone_exception.http.Unauthorized(
             message="Unauthorized"
         )
-        self.assertRaises(
+        exc = self.assertRaises(
             keystone_exception.http.Unauthorized,
             self.compute.allow_share,
             self.context,
@@ -2684,6 +2717,14 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_allow.assert_called_once_with(
             mock.ANY, share_mapping.share_id, 'ip', compute_ip, 'rw')
 
+        mock_instance_fault.assert_called_once_with(
+            mock.ANY,
+            instance,
+            exc,
+            mock.ANY
+        )
+
+    @mock.patch('nova.compute.utils.add_instance_fault_from_exc')
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
         return_value=None
@@ -2692,7 +2733,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.share.manila.API.get_access')
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     def test_allow_share_fails_protocol_not_supported(
-        self, mock_db, mock_get_access, mock_allow, mock_notifications
+        self, mock_db, mock_get_access, mock_allow, mock_notifications,
+            mock_instance_fault
     ):
         self.flags(shutdown_retry_interval=20, group='compute')
         instance = fake_instance.fake_instance_obj(
@@ -2712,7 +2754,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         mock_allow.side_effect = exception.ShareProtocolNotSupported(
             share_proto=share_mapping.share_proto
         )
-        self.assertRaises(
+        exc = self.assertRaises(
             exception.ShareProtocolNotSupported,
             self.compute.allow_share,
             self.context,
@@ -2723,6 +2765,13 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             self.context, share_mapping.share_id, 'ip', compute_ip)
         mock_allow.assert_called_once_with(
             mock.ANY, share_mapping.share_id, 'ip', compute_ip, 'rw')
+
+        mock_instance_fault.assert_called_once_with(
+            mock.ANY,
+            instance,
+            exc,
+            mock.ANY
+        )
 
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
@@ -2779,6 +2828,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             ),
         ])
 
+    @mock.patch('nova.compute.utils.add_instance_fault_from_exc')
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
         return_value=None
@@ -2790,7 +2840,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.objects.share_mapping.ShareMapping.save')
     def test_deny_share_fails_access_removal(
         self, mock_db, mock_db_get_share, mock_get_access, mock_deny,
-        mock_db_delete, mock_notifications
+        mock_db_delete, mock_notifications, mock_instance_fault
     ):
         """Make sure we can remove a share even if we have an error with
         the access or the access is not existing anymore for any reason.
@@ -2806,6 +2856,8 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         )
         share_mapping = self.get_fake_share_mapping()
         mock_db_get_share.return_value.objects.append(share_mapping)
+        mock_instance_fault.return_value = (
+            test_instance_fault.fake_faults['fake-uuid'][0])
         # Ensure CONF.my_shared_fs_storage_ip default is my_ip
         self.flags(my_ip="10.0.0.2")
         self.assertEqual(CONF.my_shared_fs_storage_ip, '10.0.0.2')
@@ -2848,6 +2900,13 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                 exception=exc
             ),
         ])
+
+        mock_instance_fault.assert_called_once_with(
+            mock.ANY,
+            instance,
+            exc,
+            mock.ANY
+        )
 
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
@@ -3060,6 +3119,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             ),
         ])
 
+    @mock.patch('nova.compute.utils.add_instance_fault_from_exc')
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
         return_value=None
@@ -3071,7 +3131,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_fails_access_removal_error(
         self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
-            mock_db_save, mock_notifications
+            mock_db_save, mock_notifications, mock_instance_fault
     ):
         """Ensure we have an exception if the access cannot be removed
         by manila.
@@ -3121,6 +3181,14 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             ),
         ])
 
+        mock_instance_fault.assert_called_once_with(
+            mock.ANY,
+            instance,
+            exc,
+            mock.ANY
+        )
+
+    @mock.patch('nova.compute.utils.add_instance_fault_from_exc')
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
         return_value=None
@@ -3132,7 +3200,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_fails_keystone_unauthorized(
         self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
-            mock_db_save, mock_notifications
+            mock_db_save, mock_notifications, mock_instance_fault
     ):
         """Ensure we have an exception if the access cannot be removed
         by manila.
@@ -3181,6 +3249,14 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             ),
         ])
 
+        mock_instance_fault.assert_called_once_with(
+            mock.ANY,
+            instance,
+            exc,
+            mock.ANY
+        )
+
+    @mock.patch('nova.compute.utils.add_instance_fault_from_exc')
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',
         return_value=None
@@ -3192,7 +3268,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
     @mock.patch('nova.objects.share_mapping.ShareMappingList.get_by_share_id')
     def test_deny_share_fails_protocol_not_supported(
         self, mock_db_get_share, mock_get_access, mock_deny, mock_db_delete,
-            mock_db_save, mock_notifications
+            mock_db_save, mock_notifications, mock_instance_fault
     ):
         """Ensure we have an exception if the access cannot be removed
         by manila.
@@ -3240,6 +3316,13 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                 exception=exc,
             ),
         ])
+
+        mock_instance_fault.assert_called_once_with(
+            mock.ANY,
+            instance,
+            exc,
+            mock.ANY
+        )
 
     @mock.patch(
         'nova.compute.utils.notify_about_share_attach_detach',

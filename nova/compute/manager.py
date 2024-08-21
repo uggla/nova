@@ -4632,6 +4632,8 @@ class ComputeManager(manager.Manager):
 
     @messaging.expected_exceptions(NotImplementedError)
     @wrap_exception()
+    @wrap_instance_event(prefix='compute')
+    @wrap_instance_fault
     def allow_share(self, context, instance, share_mapping):
 
         @utils.synchronized(share_mapping.share_id)
@@ -4778,6 +4780,8 @@ class ComputeManager(manager.Manager):
 
     @messaging.expected_exceptions(NotImplementedError)
     @wrap_exception()
+    @wrap_instance_event(prefix='compute')
+    @wrap_instance_fault
     def deny_share(self, context, instance, share_mapping):
 
         @utils.synchronized(share_mapping.share_id)
