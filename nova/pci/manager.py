@@ -132,6 +132,11 @@ class PciDevTracker(object):
         for dev in jsonutils.loads(devices_json):
             try:
                 if self.dev_filter.device_assignable(dev):
+                    managed = self.dev_filter.managed_device(dev)
+                    if not managed:
+                        dev.update({'managed': 'no'})
+                    else:
+                        dev.update({'managed': 'yes'})
                     devices.append(dev)
             except exception.PciConfigInvalidSpec as e:
                 # The raised exception is misleading as the problem is not with

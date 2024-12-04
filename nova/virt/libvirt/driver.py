@@ -6103,19 +6103,20 @@ class LibvirtDriver(driver.ComputeDriver):
 
         return sysinfo
 
-    def _set_managed_mode(self, pcidev):
+    def _set_managed_mode(self, pcidev, pci_obj):
         # only kvm support managed mode
         if CONF.libvirt.virt_type in ('parallels',):
             pcidev.managed = 'no'
         if CONF.libvirt.virt_type in ('kvm', 'qemu'):
-            pcidev.managed = 'yes'
+            managed = pci_obj.extra_info.get('managed', 'yes')
+            pcidev.managed = managed
 
     def _get_guest_pci_device(self, pci_device):
 
         dbsf = pci_utils.parse_address(pci_device.address)
         dev = vconfig.LibvirtConfigGuestHostdevPCI()
         dev.domain, dev.bus, dev.slot, dev.function = dbsf
-        self._set_managed_mode(dev)
+        self._set_managed_mode(dev, pci_device)
 
         return dev
 

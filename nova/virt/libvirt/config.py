@@ -2399,6 +2399,7 @@ class LibvirtConfigGuestHostdevPCI(LibvirtConfigGuestHostdev):
 
         self.mode = 'subsystem'
         self.type = 'pci'
+        self.managed = 'no'
 
         # These are returned from libvirt as hexadecimal strings with 0x prefix
         # even if they have a different meaningful range: domain 16 bit,

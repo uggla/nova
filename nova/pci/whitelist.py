@@ -92,6 +92,13 @@ class Whitelist(object):
                 return True
         return False
 
+    def managed_device(self, dev: ty.Dict[str, ty.Any]) -> bool:
+        for spec in self.specs:
+            if spec.match(dev):
+                if spec.tags.get('managed', 'yes') == 'no':
+                    return False
+        return True
+
     def get_devspec(
         self, pci_dev: 'objects.PciDevice',
     ) -> ty.Optional[devspec.PciDeviceSpec]:
