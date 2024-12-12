@@ -177,6 +177,8 @@ class PciDevice(base.NovaPersistentObject, base.NovaObject):
                 #     - "parent_ifname": the netdev name of the parent (PF)
                 #        device of a VF
                 #     - "mac_address": the MAC address of the PF
+                #     - "managed": "true"/"false" if the device is managed by
+                #       hypervisor
                 extra_info = self.extra_info
                 data = v if isinstance(v, str) else jsonutils.dumps(v)
                 extra_info.update({k: data})
