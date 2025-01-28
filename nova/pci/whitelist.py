@@ -99,6 +99,16 @@ class Whitelist(object):
                     return False
         return True
 
+    def live_migratable_device(self, dev: ty.Dict[str, ty.Any]) -> bool:
+        for spec in self.specs:
+            if spec.match(dev):
+                live_migr_tag = spec.tags.get('live_migratable')
+                if live_migr_tag == 'yes':
+                    return True
+                elif live_migr_tag == 'no':
+                    return False
+        return
+
     def get_devspec(
         self, pci_dev: 'objects.PciDevice',
     ) -> ty.Optional[devspec.PciDeviceSpec]:

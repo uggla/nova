@@ -137,6 +137,10 @@ class PciDevTracker(object):
                         dev.update({'managed': 'no'})
                     else:
                         dev.update({'managed': 'yes'})
+                    # this method only returns True, False or None
+                    live_migr = self.dev_filter.live_migratable_device(dev)
+                    if live_migr is not None:
+                        dev.update({'live_migratable': live_migr})
                     devices.append(dev)
             except exception.PciConfigInvalidSpec as e:
                 # The raised exception is misleading as the problem is not with

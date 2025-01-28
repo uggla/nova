@@ -293,6 +293,10 @@ class PciDeviceSpec(PciAddressSpec):
         self.vendor_id = self.tags.pop("vendor_id", ANY)
         self.product_id = self.tags.pop("product_id", ANY)
         self.dev_name = self.tags.pop("devname", None)
+        # We need to keep managed and live_migratable in the tags because it
+        # is used later in the manager.
+        self.managed = self.tags.get("managed", None)
+        self.live_migratable = self.tags.get("live_migratable", None)
         self.address: ty.Optional[WhitelistPciAddress] = None
         # Note(moshele): The address attribute can be a string or a dict.
         # For glob syntax or specific pci it is a string and for regex syntax
@@ -317,6 +321,15 @@ class PciDeviceSpec(PciAddressSpec):
         address_obj = self._address_obj()
         self._remote_managed = strutils.bool_from_string(
             self.tags.get(PCI_REMOTE_MANAGED_TAG))
+        # TODO(Uggla): Control managed and live_migratable values
+        # and raise some esception if wrong
+        if self.managed and self.managed not in ('yes', 'no'):
+            raise exception.PciConfigInvalidSpec(
+                reason=_("Invalid value for %s", self.managed))
+        if self.live_migratable and self.live_migratable not in ('yes', 'no'):
+            raise exception.PciConfigInvalidSpec(
+                reason=_("Invalid value for %s" % self.live_migratable))
+
         if self._remote_managed:
             if address_obj is None:
                 # Note that this will happen if a netdev was specified in the

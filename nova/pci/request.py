@@ -112,6 +112,13 @@ _ALIAS_SCHEMA = {
         "traits": {
             "type": "string",
         },
+        "live_migratable": {
+            "type": "string",
+            "enum": [
+                "yes",
+                "no",
+            ],
+        },
     },
     "required": ["name"],
 }
@@ -155,6 +162,10 @@ def _get_alias_from_config() -> Alias:
             if aliases[name][1][0]['dev_type'] != spec['dev_type']:
                 reason = _("Device type mismatch for alias '%s'") % name
                 raise exception.PciInvalidAlias(reason=reason)
+
+            live_migratable = spec.pop('live_migratable', None)
+            if live_migratable:
+                spec['live_migratable'] = live_migratable
 
             aliases[name][1].append(spec)
     except exception.PciInvalidAlias:

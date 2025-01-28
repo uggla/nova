@@ -153,7 +153,8 @@ class LiveMigrateData(obj_base.NovaObject):
     # Version 1.1: Added old_vol_attachment_ids field.
     # Version 1.2: Added wait_for_vif_plugged
     # Version 1.3: Added vifs field.
-    VERSION = '1.3'
+    # Version 1.4: Added pci_dev_map_src_dst field.
+    VERSION = '1.4'
 
     fields = {
         'is_volume_backed': fields.BooleanField(),
@@ -170,6 +171,7 @@ class LiveMigrateData(obj_base.NovaObject):
         # default for the config option may change in the future
         'wait_for_vif_plugged': fields.BooleanField(),
         'vifs': fields.ListOfObjectsField('VIFMigrateData'),
+        'pci_dev_map_src_dst': fields.DictOfStringsField(),
     }
 
 
