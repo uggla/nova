@@ -5272,7 +5272,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                     {
                         "vendor_id": "1377",
                         "product_id": "0047",
-                        "live_migratable": "yes",
+                        "live_migratable": "true",
                     }
                 ],
             ),
@@ -5285,7 +5285,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                     address="0000:04:00.2",
                     vendor_id="1377",
                     product_id="0047",
-                    extra_info={"live_migratable": "yes"},
+                    extra_info={"live_migratable": "true"},
                     request_id=uuids.pcidev1,
                 )
             ]
@@ -5329,7 +5329,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                     {
                         "vendor_id": "1377",
                         "product_id": "0047",
-                        "live_migratable": "yes",
+                        "live_migratable": "true",
                     }
                 ],
             ),
@@ -5342,7 +5342,7 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                     address="0000:04:00.2",
                     vendor_id="1377",
                     product_id="0047",
-                    extra_info={"live_migratable": "yes"},
+                    extra_info={"live_migratable": "true"},
                     request_id=uuids.pcidev1,
                 )
             ]

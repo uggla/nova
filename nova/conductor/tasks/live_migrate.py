@@ -232,17 +232,52 @@ class LiveMigrationTask(base.TaskBase):
             1. Instance contains VIF related PCI requests.
             2. Neutron supports multiple port binding extension.
             3. Src and Dest host support VIF related PCI allocations.
+            4. Instance contains live-migratable PCI devices.
         """
         if self.instance.pci_requests is None or not len(
                 self.instance.pci_requests.requests):
             return
 
+        flavor_only = True
         for pci_request in self.instance.pci_requests.requests:
-            if pci_request.source != objects.InstancePCIRequest.NEUTRON_PORT:
-                # allow only VIF related PCI requests in live migration.
-                raise exception.MigrationPreCheckError(
-                    reason= "non-VIF related PCI requests for instance "
-                            "are not allowed for live migration.")
+            if pci_request.source == objects.InstancePCIRequest.FLAVOR_ALIAS:
+
+                if (
+                    "spec" not in pci_request or
+                    pci_request.spec is None or
+                    not all(
+                        spec.get("live_migratable") == "true"
+                        for spec in pci_request.spec
+                    )
+                ):
+                    # Ensure the request explicitly requests migratable devices
+                    raise exception.MigrationPreCheckError(
+                        reason="This request does not explicitly request "
+                        "live-migratable devices."
+                    )
+
+                devs = self.instance.get_pci_devices(
+                    request_id=pci_request.request_id
+                )
+                if not all(
+                    [
+                        dev.extra_info.get("live_migratable") == "true"
+                        for dev in devs
+                    ]
+                ):
+                    # Allow only migratable devices for flavor-based ones.
+                    raise exception.MigrationPreCheckError(
+                        reason="non live-migratable related PCI devices for "
+                        "instance are not allowed for live migration."
+                    )
+            if pci_request.source == objects.InstancePCIRequest.NEUTRON_PORT:
+                flavor_only = False
+
+        if flavor_only:
+            # Since we only have flavor-based PCI requests, we don't need to
+            # check VIF specifics below.
+            return
+
         # All PCI requests are VIF related, now check neutron,
         # source and destination compute nodes.
         if not self.network_api.has_port_binding_extension(self.context):
@@ -482,6 +517,12 @@ class LiveMigrationTask(base.TaskBase):
         # add them to the RequestSpec.
         request_spec.requested_resources = port_res_req
         request_spec.request_level_params = req_lvl_params
+
+        # NOTE(gibi): as PCI devices is tracked in placement we
+        # need to generate request groups from InstancePCIRequests.
+        # This will append new RequestGroup objects to the
+        # request_spec.requested_resources list if needed
+        request_spec.generate_request_groups_from_pci_requests()
 
         scheduler_utils.setup_instance_group(self.context, request_spec)
 
