@@ -342,6 +342,7 @@ class _PCIServersWithMigrationTestBase(_PCIServersTestBase):
         dom.complete_job()
 
 
+@ddt.ddt
 class SRIOVServersTest(_PCIServersWithMigrationTestBase):
 
     # TODO(stephenfin): We're using this because we want to be able to force
@@ -556,7 +557,10 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
             pci_info, expected_managed="yes", device_spec=device_spec
         )
 
-    def test_create_server_with_VF_and_managed_set_to_yes_fails_version(self):
+    @ddt.data({"tag": "managed"}, {"tag": "live_migratable"})
+    def test_create_server_with_VF_and_managed_set_to_yes_fails_version(
+        self, case
+    ):
         device_spec = [
             {
                 "vendor_id": fakelibvirt.PCI_VEND_ID,
@@ -567,7 +571,7 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
                 "vendor_id": fakelibvirt.PCI_VEND_ID,
                 "product_id": fakelibvirt.VF_PROD_ID,
                 "physical_network": "physnet4",
-                "managed": "yes",
+                case["tag"]: "yes",
             },
         ]
         pci_info = fakelibvirt.HostPCIDevicesInfo(num_pfs=1, num_vfs=1)
@@ -581,8 +585,8 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         )
 
         self.assertIn(
-            "PCI device spec is configured for managed "
-            "but it's not supported by libvirt.",
+            "PCI device spec is configured for managed or "
+            "live_migratable but it's not supported by libvirt.",
             str(exc),
         )
 
@@ -728,11 +732,12 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         self.assertEqual(500, ex.response.status_code)
         self.assertIn('NoValidHost', str(ex))
 
-    def test_live_migrate_server_with_VF(self):
+    def test_live_migrate_server_with_VF_legacy(self):
         """Live migrate an instance with a PCI VF.
 
         This should fail because it's not possible to live migrate an instance
-        with a PCI passthrough device, even if it's a SR-IOV VF.
+        with a PCI passthrough device, even if it's a SR-IOV VF. Until we have
+        the correct version of qemu and libvirt.
         """
 
         # start two compute services
@@ -758,6 +763,481 @@ class SRIOVServersTest(_PCIServersWithMigrationTestBase):
         # this will bubble to the API
         self.assertEqual(500, ex.response.status_code)
         self.assertIn('NoValidHost', str(ex))
+
+    def test_live_migrate_server_with_VF_01(self):
+        """Live migrate an instance with a PCI VF.
+        This should now work with the correct version of libvirt and qemu
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'physical_network': 'physnet4',
+                "live_migratable": "yes",
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+                'live_migratable': 'yes',
+            },
+        )]
+
+        self._live_migrate_server(PCI_DEVICE_SPEC, PCI_ALIAS)
+
+    def test_live_migrate_server_with_VF_02(self):
+        """Live migrate an instance with a non migratable PCI VF.
+        We should fail to create the instance because we request a
+        live migratable PCI device and there is only a non live migratable one.
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'physical_network': 'physnet4',
+                "live_migratable": "no",
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+                'live_migratable': 'yes',
+            },
+        )]
+
+        # The AssertionError means the server failed to be created
+        # it fails on the assertion in _wait_for_state_change
+        self.assertRaises(
+            AssertionError,
+            self._live_migrate_server,
+            PCI_DEVICE_SPEC,
+            PCI_ALIAS,
+        )
+
+    def test_live_migrate_server_with_VF_03(self):
+        """Live migrate an instance with a non migratable PCI VF.
+        We should manage to create the instance but fail to live migrate it.
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'physical_network': 'physnet4',
+                "live_migratable": "no",
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+                'live_migratable': 'no',
+            },
+        )]
+
+        # The OpenStackApiException means the server failed to be migrated
+        exc = self.assertRaises(
+            client.OpenStackApiException,
+            self._live_migrate_server,
+            PCI_DEVICE_SPEC,
+            PCI_ALIAS,
+        )
+        self.assertEqual(500, exc.response.status_code)
+        self.assertIn('NoValidHost', str(exc))
+
+    def test_live_migrate_server_with_VF_04(self):
+        """Live migrate an instance with a live migratable PCI VF.
+        We requested a non live migratable PCI device and there is only a live
+        migratable one.
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'physical_network': 'physnet4',
+                "live_migratable": "yes",
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+                'live_migratable': 'no',
+            },
+        )]
+
+        # The AssertionError means the server failed to be created
+        # it fails on the assertion in _wait_for_state_change
+        self.assertRaises(
+            AssertionError,
+            self._live_migrate_server,
+            PCI_DEVICE_SPEC,
+            PCI_ALIAS,
+        )
+
+    def test_live_migrate_server_with_VF_05(self):
+        """Live migrate an instance with a live migratable PCI VF.
+        We requested a live migratable PCI device and there is only a
+        device with live migratable not specified.
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'physical_network': 'physnet4',
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+                "live_migratable": "yes",
+            },
+        )]
+
+        # The AssertionError means the server failed to be created
+        # it fails on the assertion in _wait_for_state_change
+        self.assertRaises(
+            AssertionError,
+            self._live_migrate_server,
+            PCI_DEVICE_SPEC,
+            PCI_ALIAS,
+        )
+
+    def test_live_migrate_server_with_VF_06(self):
+        """Live migrate an instance with a live migratable PCI VF.
+        We requested a non live migratable PCI device and there is only a
+        device with live migratable not specified.
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'physical_network': 'physnet4',
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+                "live_migratable": "no",
+            },
+        )]
+
+        # The AssertionError means the server failed to be created
+        # it fails on the assertion in _wait_for_state_change
+        self.assertRaises(
+            AssertionError,
+            self._live_migrate_server,
+            PCI_DEVICE_SPEC,
+            PCI_ALIAS,
+        )
+
+    def test_live_migrate_server_with_VF_07(self):
+        """Live migrate an instance with a live migratable PCI VF.
+        We have not specify any kind of live migratable PCI device in the
+        request and we have a migratable device, we should not migrate as
+        we could get non migratable device on the target host.
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'physical_network': 'physnet4',
+                "live_migratable": "yes",
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+            },
+        )]
+
+        # The OpenStackApiException means the server failed to be migrated
+        exc = self.assertRaises(
+            client.OpenStackApiException,
+            self._live_migrate_server,
+            PCI_DEVICE_SPEC,
+            PCI_ALIAS,
+        )
+        self.assertEqual(500, exc.response.status_code)
+        self.assertIn('NoValidHost', str(exc))
+
+    def test_live_migrate_server_with_VF_08(self):
+        """Live migrate an instance with a live migratable PCI VF.
+        We have not specify any kind of live migratable PCI device and
+        we have a non migratable device.
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'physical_network': 'physnet4',
+                "live_migratable": "no",
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+            },
+        )]
+
+        # The OpenStackApiException means the server failed to be migrated
+        exc = self.assertRaises(
+            client.OpenStackApiException,
+            self._live_migrate_server,
+            PCI_DEVICE_SPEC,
+            PCI_ALIAS,
+        )
+        self.assertEqual(500, exc.response.status_code)
+        self.assertIn('NoValidHost', str(exc))
+
+    def test_live_migrate_server_with_VF_09(self):
+        """Live migrate an instance with a live migratable PCI VF.
+        We have not specify any kind of live migratable PCI device and
+        we have a non migratable device.
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'physical_network': 'physnet4',
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+            },
+        )]
+
+        # The OpenStackApiException means the server failed to be migrated
+        exc = self.assertRaises(
+            client.OpenStackApiException,
+            self._live_migrate_server,
+            PCI_DEVICE_SPEC,
+            PCI_ALIAS,
+        )
+        self.assertEqual(500, exc.response.status_code)
+        self.assertIn('NoValidHost', str(exc))
+
+    def test_live_migrate_server_with_VF_10(self):
+        """Live migrate an instance with 3 x PCI VF.
+        """
+
+        PCI_DEVICE_SPEC = [jsonutils.dumps(x) for x in (
+            {
+                "vendor_id": fakelibvirt.PCI_VEND_ID,
+                "product_id": fakelibvirt.VF_PROD_ID,
+                "physical_network": "physnet4",
+                "live_migratable": "yes",
+                "address": {
+                    "domain": "00",
+                    "bus": "81",
+                    "slot": "00",
+                    "function": "[1-3]",
+                },
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+                'live_migratable': 'yes',
+            },
+        )]
+
+        self._live_migrate_server(PCI_DEVICE_SPEC, PCI_ALIAS, num_vfs=3)
+
+    def test_live_migrate_server_with_VF_11(self):
+        """Live migrate an instance with 1 x PCI VF asymmetric conf.
+        """
+
+        PCI_DEVICE_SPEC_SRC = [jsonutils.dumps(x) for x in (
+            {
+                "vendor_id": fakelibvirt.PCI_VEND_ID,
+                "product_id": fakelibvirt.VF_PROD_ID,
+                "physical_network": "physnet4",
+                "live_migratable": "yes",
+                "address": {
+                    "domain": "00",
+                    "bus": "81",
+                    "slot": "00",
+                    "function": "[1]",
+                },
+            },
+        )]
+
+        PCI_ALIAS = [jsonutils.dumps(x) for x in (
+            {
+                'vendor_id': fakelibvirt.PCI_VEND_ID,
+                'product_id': fakelibvirt.VF_PROD_ID,
+                'name': self.VFS_ALIAS_NAME,
+                'device_type': fields.PciDeviceType.SRIOV_VF,
+                'live_migratable': 'yes',
+            },
+        )]
+
+        self._live_migrate_server(PCI_DEVICE_SPEC_SRC, PCI_ALIAS, num_vfs=1)
+
+    def _create_computes_and_server(self, device_spec, alias, num_vfs=1):
+        self.flags(
+            device_spec=device_spec,
+            alias=alias,
+            group='pci'
+        )
+
+        # start two compute services
+        self.start_compute(
+            hostname="test_compute0",
+            libvirt_version=convert_version_to_int(
+                driver.MIN_VFIO_PCI_VARIANT_LIBVIRT_VERSION
+            ),
+            qemu_version=convert_version_to_int(
+                driver.MIN_VFIO_PCI_VARIANT_QEMU_VERSION
+            ),
+            pci_info=fakelibvirt.HostPCIDevicesInfo(
+                num_pfs=1, num_vfs=num_vfs
+            ),
+        )
+        # create a server before starting the 2nd compute to ensure it
+        # starts on the first node.
+        extra_spec = {
+            "pci_passthrough:alias": f"{self.VFS_ALIAS_NAME}:{num_vfs}"
+        }
+        flavor_id = self._create_flavor(extra_spec=extra_spec)
+
+        server = self._create_server(flavor_id=flavor_id, networks='none')
+
+        PCI_DEVICE_SPEC_DST = [jsonutils.dumps(x) for x in (
+            {
+                "vendor_id": fakelibvirt.PCI_VEND_ID,
+                "product_id": fakelibvirt.VF_PROD_ID,
+                "physical_network": "physnet4",
+                "live_migratable": "yes",
+                "address": {
+                    "domain": "00",
+                    "bus": "81",
+                    "slot": "00",
+                    "function": "[2]",
+                },
+            },
+        )]
+        self.flags(
+            device_spec=PCI_DEVICE_SPEC_DST,
+            alias=alias,
+            group='pci'
+        )
+        self.start_compute(
+            hostname="test_compute1",
+            libvirt_version=convert_version_to_int(
+                driver.MIN_VFIO_PCI_VARIANT_LIBVIRT_VERSION
+            ),
+            qemu_version=convert_version_to_int(
+                driver.MIN_VFIO_PCI_VARIANT_QEMU_VERSION
+            ),
+            pci_info=fakelibvirt.HostPCIDevicesInfo(
+                num_pfs=1, num_vfs=2
+            ),
+        )
+
+        return server
+
+    def _live_migrate_server(self, device_spec, alias, num_vfs=1):
+        orig_update = nova.virt.libvirt.migration.get_updated_guest_xml
+
+        def fake_update(*args, **kwargs):
+            # tree = etree.fromstring(xml)
+            # elem = tree.find('./devices/interface/[@type="vdpa"]')
+            #
+            # # compare source device
+            # # the MAC address is derived from the neutron port, while the
+            # # source dev path assumes we attach vDPA devs in order
+            # expected = """
+            #     <interface type="vdpa">
+            #       <mac address="b5:bc:2e:e7:51:ee"/>
+            #       <source dev="/dev/vhost-vdpa-3"/>
+            #     </interface>"""
+            # actual = etree.tostring(elem, encoding='unicode')
+            #
+            # self.assertXmlEqual(expected, actual)
+            xml = orig_update(*args, **kwargs)
+            print(xml)
+
+            return xml
+
+        self.stub_out(
+            'nova.virt.libvirt.migration.get_updated_guest_xml',
+            fake_update,
+        )
+
+        with mock.patch.object(
+            nova.virt.libvirt.guest.Guest,
+            "create",
+            wraps=nova.virt.libvirt.guest.Guest.create,
+        ) as mock_create:
+        #     mock.patch.object(
+        #     nova.virt.libvirt.migration,
+        #     "get_updated_guest_xml",
+        #     wraps=nova.virt.libvirt.migration.get_updated_guest_xml,
+        #
+        # ) as mock_update:
+
+
+
+            server = self._create_computes_and_server(
+                device_spec, alias, num_vfs
+            )
+            # now live migrate that server
+            self._live_migrate(server, "completed")
+
+            xml_src = mock_create.call_args[0][0]
+            # xml_dst= mock_update.call_args[0][0]
+
+            __import__('pdb').set_trace()
+            return (xml_src, xml_dst)
 
     def _test_move_operation_with_neutron(self, move_operation,
                                           expect_fail=False):

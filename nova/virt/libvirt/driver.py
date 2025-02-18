@@ -920,7 +920,9 @@ class LibvirtDriver(driver.ComputeDriver):
         if CONF.pci.device_spec:
             pci_whitelist = whitelist.Whitelist(CONF.pci.device_spec)
             for spec in pci_whitelist.specs:
-                if spec.tags.get("managed"):
+                if spec.tags.get("live_migratable") or spec.tags.get(
+                    "managed"
+                ):
                     need_specific_version = True
 
         if need_specific_version:
@@ -932,8 +934,8 @@ class LibvirtDriver(driver.ComputeDriver):
                 return
             else:
                 msg = _(
-                    "PCI device spec is configured for managed "
-                    "but it's not supported by libvirt."
+                    "PCI device spec is configured for managed or "
+                    "live_migratable but it's not supported by libvirt."
                 )
                 raise exception.InvalidConfiguration(msg)
 

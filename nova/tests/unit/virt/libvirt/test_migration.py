@@ -278,6 +278,113 @@ class UtilityMigrationTestCase(test.NoDBTestCase):
         self.assertRaises(exception.NovaException,
                           migration._update_mdev_xml, doc, data.target_mdevs)
 
+    def test_update_pci_dev_xml(self):
+
+        def normalize(xml_str):
+            return etree.tostring(
+                etree.fromstring(xml_str),
+                pretty_print=True,
+                encoding="unicode",
+            ).strip()
+
+        xml_pattern = """<domain>
+  <devices>
+    <hostdev mode='subsystem' type='pci' managed='no'>
+      <driver name='vfio'/>
+      <source>
+        <address domain='0x0000' bus='0x25' slot='0x00' function='0x4'/>
+      </source>
+      <alias name='hostdev0'/>
+      <address type='pci' domain='0x0000' bus='0x00'
+      slot='0x05' function='0x0'/>
+    </hostdev>
+  </devices>
+</domain>"""
+        expected_xml_pattern = """<domain>
+  <devices>
+    <hostdev mode='subsystem' type='pci' managed='no'>
+      <driver name='vfio'/>
+      <source>
+        <address domain='0x0000' bus='0x26' slot='0x01' function='0x5'/>
+      </source>
+      <alias name='hostdev0'/>
+      <address type='pci' domain='0x0000' bus='0x00'
+      slot='0x05' function='0x0'/>
+    </hostdev>
+  </devices>
+</domain>"""
+        data = objects.LibvirtLiveMigrateData(
+            pci_dev_map_src_dst={"0000:25:00.4": "0000:26:01.5"})
+        doc = etree.fromstring(xml_pattern)
+        res = migration._update_pci_dev_xml(doc, data.pci_dev_map_src_dst)
+        self.assertEqual(
+            normalize(expected_xml_pattern),
+            etree.tostring(res, encoding="unicode", pretty_print=True).strip(),
+        )
+
+    def test_update_pci_dev_xml_malformed_address(self):
+
+        xml_pattern = """<domain>
+  <devices>
+    <hostdev mode='subsystem' type='pci' managed='no'>
+      <driver name='vfio'/>
+      <source>
+        <address domain='0x0000' bus='25' slot='0x00' function='0x4'/>
+      </source>
+      <alias name='hostdev0'/>
+      <address type='pci' domain='0x0000' bus='0x00'
+      slot='0x05' function='0x0'/>
+    </hostdev>
+  </devices>
+</domain>"""
+        data = objects.LibvirtLiveMigrateData(
+            pci_dev_map_src_dst={"0000:25:00.4": "0000:26:01.5"})
+        doc = etree.fromstring(xml_pattern)
+        exc = self.assertRaises(
+            exception.NovaException,
+            migration._update_pci_dev_xml,
+            doc,
+            data.pci_dev_map_src_dst,
+        )
+
+        self.assertIn(
+            "Address is malformed, missing the '0x' prefix: "
+            "{'domain': '0x0000', 'bus': '25', 'slot': '0x00', "
+            "'function': '0x4'}",
+            str(exc),
+        )
+
+    def test_update_pci_dev_xml_fails_not_found_src_address(self):
+
+        xml_pattern = """<domain>
+  <devices>
+    <hostdev mode='subsystem' type='pci' managed='no'>
+      <driver name='vfio'/>
+      <source>
+        <address domain='0x0000' bus='0x25' slot='0x00' function='0x4'/>
+      </source>
+      <alias name='hostdev0'/>
+      <address type='pci' domain='0x0000' bus='0x00'
+      slot='0x05' function='0x0'/>
+    </hostdev>
+  </devices>
+</domain>"""
+        data = objects.LibvirtLiveMigrateData(
+            pci_dev_map_src_dst={"0000:25:00.5": "0000:26:01.5"})
+        doc = etree.fromstring(xml_pattern)
+        exc = self.assertRaises(
+            exception.NovaException,
+            migration._update_pci_dev_xml,
+            doc,
+            data.pci_dev_map_src_dst,
+        )
+
+        self.assertIn(
+            "Unable to find the destination PCI address to use for this "
+            "source PCI address: 0000:25:00.4",
+            str(exc),
+        )
+
     def test_update_cpu_shared_set_xml(self):
         doc = etree.fromstring("""
             <domain>

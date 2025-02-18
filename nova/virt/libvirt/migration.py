@@ -88,6 +88,10 @@ def get_updated_guest_xml(instance, guest, migrate_data, get_volume_config,
         xml_doc = _update_numa_xml(xml_doc, migrate_data)
     if 'target_mdevs' in migrate_data:
         xml_doc = _update_mdev_xml(xml_doc, migrate_data.target_mdevs)
+    if "pci_dev_map_src_dst" in migrate_data:
+        xml_doc = _update_pci_dev_xml(
+            xml_doc, migrate_data.pci_dev_map_src_dst)
+
     if new_resources:
         xml_doc = _update_device_resources_xml(xml_doc, new_resources)
     return etree.tostring(xml_doc, encoding='unicode')
@@ -145,6 +149,59 @@ def _update_mdev_xml(xml_doc, target_mdevs):
                 else:
                     address_tag.set('uuid', dst_mdev)
     LOG.debug('_update_mdev_xml output xml=%s',
+              etree.tostring(xml_doc, encoding='unicode', pretty_print=True))
+    return xml_doc
+
+
+def _update_pci_dev_xml(xml_doc, pci_dev_map_src_dst):
+    for hostdev in xml_doc.findall('./devices/hostdev'):
+        # domain="0x0000" bus="0x25" slot="0x00" function="0x4"
+        if hostdev.get('type') == 'pci':
+            address_tag = hostdev.find('source/address')
+            domain = address_tag.get('domain', 0)
+            bus = address_tag.get('bus', 0)
+            slot = address_tag.get('slot', 0)
+            function = address_tag.get('function', 0)
+
+            pci_values = {
+                "domain": domain,
+                "bus": bus,
+                "slot": slot,
+                "function": function,
+            }
+
+            if not all(
+                value.startswith("0x") for value in pci_values.values()
+            ):
+                raise exception.NovaException(
+                    "Address is malformed, missing the '0x' "
+                    f"prefix: {pci_values}"
+                )
+
+            pci_values = {key: value[2:] for key, value in pci_values.items()}
+
+            domain, bus, slot, function = pci_values.values()
+
+            pci_addr = nova.pci.utils.get_pci_address(
+                domain, bus, slot, function
+            )
+
+            # All devices should be live_migratable so we should find it in the
+            # mapping
+            if pci_addr not in pci_dev_map_src_dst:
+                raise exception.NovaException(
+                    'Unable to find the destination PCI address '
+                    f'to use for this source PCI address: {pci_addr}')
+            if pci_addr in pci_dev_map_src_dst:
+                (domain, bus, slot, function) = nova.pci.utils.parse_address(
+                    pci_dev_map_src_dst[pci_addr]
+                )
+                address_tag.set('domain', '0x' + domain)
+                address_tag.set('bus', '0x' + bus)
+                address_tag.set('slot', '0x' + slot)
+                address_tag.set('function', '0x' + function)
+
+    LOG.debug('_update_pci_xml output xml=%s',
               etree.tostring(xml_doc, encoding='unicode', pretty_print=True))
     return xml_doc
 
