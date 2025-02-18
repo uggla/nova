@@ -1810,6 +1810,11 @@ class LiveMigrationURINotAvailable(NovaException):
                 'for "%(virt_type)s" hypervisor virtualization type.')
 
 
+class LiveMigrationSrcDstMismatch(NovaException):
+    msg_fmt = _('The number of PCI devices from the source "%(dev_src)s" does '
+                'not match the number at the destination "%(dev_dst)s".')
+
+
 class UnshelveException(NovaException):
     msg_fmt = _("Error during unshelve instance %(instance_id)s: %(reason)s")
 

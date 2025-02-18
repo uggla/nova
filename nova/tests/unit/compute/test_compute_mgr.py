@@ -5218,9 +5218,10 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
                 None)
             return result
 
+    @mock.patch.object(objects.Instance, 'pci_requests')
     @mock.patch('nova.objects.InstanceGroup.get_by_instance_uuid', mock.Mock(
         side_effect=exception.InstanceGroupNotFound(group_uuid='')))
-    def test_check_can_live_migrate_destination_success(self):
+    def test_check_can_live_migrate_destination_success(self, mock_pci):
         self.useFixture(std_fixtures.MonkeyPatch(
             'nova.network.neutron.API.has_port_binding_extension',
             lambda *args: True))
@@ -5237,9 +5238,10 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
             self._test_check_can_live_migrate_destination,
             do_raise=True)
 
+    @mock.patch.object(objects.Instance, 'pci_requests')
     @mock.patch('nova.objects.InstanceGroup.get_by_instance_uuid', mock.Mock(
         side_effect=exception.InstanceGroupNotFound(group_uuid='')))
-    def test_check_can_live_migrate_destination_contains_vifs(self):
+    def test_check_can_live_migrate_destination_contains_vifs(self, mock_pci):
         self.useFixture(std_fixtures.MonkeyPatch(
             'nova.network.neutron.API.has_port_binding_extension',
             lambda *args: True))
@@ -5247,26 +5249,146 @@ class ComputeManagerUnitTestCase(test.NoDBTestCase,
         self.assertIn('vifs', migrate_data)
         self.assertIsNotNone(migrate_data.vifs)
 
+    @mock.patch.object(objects.PciDeviceList, 'get_by_instance_uuid')
+    @mock.patch(
+        'nova.compute.resource_tracker.ResourceTracker.claim_pci_devices')
+    @mock.patch.object(objects.Instance, 'migration_context')
+    @mock.patch.object(objects.Instance, 'pci_requests')
     @mock.patch('nova.objects.InstanceGroup.get_by_instance_uuid', mock.Mock(
         side_effect=exception.InstanceGroupNotFound(group_uuid='')))
-    def test_check_can_live_migrate_destination_no_binding_extended(self):
+    def test_check_can_live_migrate_destination_contains_vifs_and_pci_lm(
+        self, mock_pci, mock_ctxt, mock_rt, mock_devs
+    ):
+        self.useFixture(std_fixtures.MonkeyPatch(
+            'nova.network.neutron.API.has_port_binding_extension',
+            lambda *args: True))
+
+        mock_pci.requests = [
+            objects.InstancePCIRequest(
+                request_id=uuids.req0,
+                requester_id=uuids.pci1,
+                alias_name="spec_alias",
+                spec=[
+                    {
+                        "vendor_id": "1377",
+                        "product_id": "0047",
+                        "live_migratable": "yes",
+                    }
+                ],
+            ),
+        ]
+
+        fake_devs = objects.PciDeviceList(
+            objects=[
+                objects.PciDevice(
+                    compute_node_id=1,
+                    address="0000:04:00.2",
+                    vendor_id="1377",
+                    product_id="0047",
+                    extra_info={"live_migratable": "yes"},
+                    request_id=uuids.pcidev1,
+                )
+            ]
+        )
+
+        mock_rt.return_value = fake_devs
+        mock_devs.return_value = fake_devs
+
+        migrate_data = self._test_check_can_live_migrate_destination()
+        mock_rt.assert_called_once()
+        self.assertIn('vifs', migrate_data)
+        self.assertIsNotNone(migrate_data.vifs)
+        self.assertIn('pci_dev_map_src_dst', migrate_data)
+        self.assertIsNotNone(migrate_data.pci_dev_map_src_dst)
+        self.assertEqual(
+            {fake_devs[0].address: fake_devs[0].address},
+            migrate_data.pci_dev_map_src_dst,
+        )
+
+    @mock.patch.object(compute_utils, 'add_instance_fault_from_exc')
+    @mock.patch.object(objects.PciDeviceList, 'get_by_instance_uuid')
+    @mock.patch(
+        'nova.compute.resource_tracker.ResourceTracker.claim_pci_devices')
+    @mock.patch.object(objects.Instance, 'migration_context')
+    @mock.patch.object(objects.Instance, 'pci_requests')
+    @mock.patch('nova.objects.InstanceGroup.get_by_instance_uuid', mock.Mock(
+        side_effect=exception.InstanceGroupNotFound(group_uuid='')))
+    def test_check_can_live_migrate_destination_contains_pci_lm_fails_count(
+        self, mock_pci, mock_ctxt, mock_rt, mock_devs, mock_fault
+    ):
+        self.useFixture(std_fixtures.MonkeyPatch(
+            'nova.network.neutron.API.has_port_binding_extension',
+            lambda *args: False))
+
+        mock_pci.requests = [
+            objects.InstancePCIRequest(
+                request_id=uuids.req0,
+                requester_id=uuids.pci1,
+                alias_name="spec_alias",
+                spec=[
+                    {
+                        "vendor_id": "1377",
+                        "product_id": "0047",
+                        "live_migratable": "yes",
+                    }
+                ],
+            ),
+        ]
+
+        fake_devs = objects.PciDeviceList(
+            objects=[
+                objects.PciDevice(
+                    compute_node_id=1,
+                    address="0000:04:00.2",
+                    vendor_id="1377",
+                    product_id="0047",
+                    extra_info={"live_migratable": "yes"},
+                    request_id=uuids.pcidev1,
+                )
+            ]
+        )
+
+        mock_rt.return_value = fake_devs
+        mock_devs.return_value = objects.PciDeviceList()
+
+        exc = self.assertRaises(
+            exception.LiveMigrationSrcDstMismatch,
+            self._test_check_can_live_migrate_destination,
+        )
+
+        self.assertEqual(
+            'The number of PCI devices from the source "0" does not match the '
+            'number at the destination "1".', str(exc))
+
+    @mock.patch.object(objects.Instance, 'pci_requests')
+    @mock.patch('nova.objects.InstanceGroup.get_by_instance_uuid', mock.Mock(
+        side_effect=exception.InstanceGroupNotFound(group_uuid='')))
+    def test_check_can_live_migrate_destination_no_binding_extended(
+        self, mock_pci
+    ):
         self.useFixture(std_fixtures.MonkeyPatch(
             'nova.network.neutron.API.has_port_binding_extension',
             lambda *args: False))
         migrate_data = self._test_check_can_live_migrate_destination()
         self.assertNotIn('vifs', migrate_data)
 
+    @mock.patch.object(objects.Instance, 'pci_requests')
     @mock.patch('nova.objects.InstanceGroup.get_by_instance_uuid', mock.Mock(
         side_effect=exception.InstanceGroupNotFound(group_uuid='')))
-    def test_check_can_live_migrate_destination_src_numa_lm_false(self):
+    def test_check_can_live_migrate_destination_src_numa_lm_false(
+        self, mock_pci
+    ):
         self.useFixture(std_fixtures.MonkeyPatch(
             'nova.network.neutron.API.has_port_binding_extension',
             lambda *args: True))
         self._test_check_can_live_migrate_destination(src_numa_lm=False)
 
+    @mock.patch.object(objects.Instance, 'pci_requests')
     @mock.patch('nova.objects.InstanceGroup.get_by_instance_uuid', mock.Mock(
         side_effect=exception.InstanceGroupNotFound(group_uuid='')))
-    def test_check_can_live_migrate_destination_src_numa_lm_true(self):
+    def test_check_can_live_migrate_destination_src_numa_lm_true(
+        self, mock_pci
+    ):
         self.useFixture(std_fixtures.MonkeyPatch(
             'nova.network.neutron.API.has_port_binding_extension',
             lambda *args: True))

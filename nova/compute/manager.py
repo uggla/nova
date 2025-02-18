@@ -9056,6 +9056,48 @@ class ComputeManager(manager.Manager):
                 LOG.info('Destination was ready for NUMA live migration, '
                          'but source is either too old, or is set to an '
                          'older upgrade level.', instance=instance)
+
+            # Based on scheduler request and filter we know that we have
+            # a dest instance with the correct number of live_migratable pci
+            # devices (flavor_alias) + other pci devices (neutron_port)
+            pci_reqs = [
+                pci_req
+                for pci_req in instance.pci_requests.requests
+                if pci_req.source == objects.InstancePCIRequest.FLAVOR_ALIAS
+            ]
+
+            if pci_reqs:
+                # Create PCI requests and claim against PCI resource tracker
+                # for out dest instance
+                lm_pci_requests = objects.InstancePCIRequests(
+                    requests=pci_reqs,
+                    instance_uuid=instance.uuid)
+                claimed_lm_pci_devs = self._claim_from_pci_reqs(
+                    ctxt, instance, lm_pci_requests
+                )
+
+                pci_devs = objects.PciDeviceList.get_by_instance_uuid(
+                    ctxt, instance.uuid
+                )
+                src_pci_devs = [
+                    pci_dev
+                    for pci_dev in pci_devs
+                    if pci_dev.extra_info["live_migratable"]
+                ]
+
+                if len(src_pci_devs) != len(claimed_lm_pci_devs):
+                    raise exception.LiveMigrationSrcDstMismatch(
+                        dev_src=len(src_pci_devs),
+                        dev_dst=len(claimed_lm_pci_devs),
+                    )
+
+                migrate_data.pci_dev_map_src_dst = dict(
+                    zip(
+                        list(map(lambda dev: dev.address, src_pci_devs)),
+                        list(map(lambda dev: dev.address, claimed_lm_pci_devs))
+                    )
+                )
+
             if self.network_api.has_port_binding_extension(ctxt):
                 # Create migrate_data vifs if not provided by driver.
                 if 'vifs' not in migrate_data:
@@ -9077,6 +9119,22 @@ class ComputeManager(manager.Manager):
             self.driver.cleanup_live_migration_destination_check(ctxt,
                     dest_check_data)
         return migrate_data
+
+    def _claim_from_pci_reqs(self, ctxt, instance, lm_pci_requests):
+        # if we are called during the live migration with NUMA topology
+        # support the PCI claim needs to consider the destination NUMA
+        # topology that is then stored in the migration_context
+        dest_topo = None
+        if instance.migration_context:
+            dest_topo = instance.migration_context.new_numa_topology
+
+        claimed_pci_devices_objs = self.rt.claim_pci_devices(
+            ctxt, lm_pci_requests, dest_topo)
+
+        for pci_dev in claimed_pci_devices_objs:
+            LOG.debug("PCI device: %s Claimed on destination node",
+                      pci_dev.address)
+        return claimed_pci_devices_objs
 
     def _live_migration_claim(self, ctxt, instance, migrate_data,
                               migration, limits, allocs):
