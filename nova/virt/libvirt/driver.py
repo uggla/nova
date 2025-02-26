@@ -226,8 +226,6 @@ NEXT_MIN_QEMU_VERSION = (8, 2, 2)
 # vIOMMU model value `virtio` minimal support version
 MIN_LIBVIRT_VIOMMU_VIRTIO_MODEL = (8, 3, 0)
 
-MIN_LIBVIRT_TB_CACHE_SIZE = (8, 0, 0)
-
 # Virtuozzo driver support
 MIN_VIRTUOZZO_VERSION = (7, 0, 0)
 
@@ -245,19 +243,10 @@ VGPU_RESOURCE_SEMAPHORE = 'vgpu_resources'
 MIN_MDEV_LIVEMIG_LIBVIRT_VERSION = (8, 6, 0)
 MIN_MDEV_LIVEMIG_QEMU_VERSION = (8, 1, 0)
 
-# Minimum version supporting persistent mdevs.
-# https://libvirt.org/drvnodedev.html#mediated-devices-mdevs
-MIN_LIBVIRT_PERSISTENT_MDEV = (7, 3, 0)
-
-# Autostart appears to be available starting in 7.8.0
-# https://github.com/libvirt/libvirt/commit/c6607a25b93bd6b0188405785d6608fdf71c8e0a
-MIN_LIBVIRT_NODEDEV_AUTOSTART = (7, 8, 0)
-
 LIBVIRT_PERF_EVENT_PREFIX = 'VIR_PERF_PARAM_'
 
 # Maxphysaddr minimal support version.
 MIN_LIBVIRT_MAXPHYSADDR = (8, 7, 0)
-MIN_QEMU_MAXPHYSADDR = (2, 7, 0)
 
 # stateless firmware support
 MIN_LIBVIRT_STATELESS_FIRMWARE = (8, 6, 0)
@@ -794,9 +783,6 @@ class LibvirtDriver(driver.ComputeDriver):
 
         self._check_my_ip()
 
-        # TODO(ykarel) This can be dropped when MIN_LIBVIRT_VERSION>=8.0.0
-        self._supports_tb_cache_size()
-
         if (CONF.libvirt.virt_type == 'lxc' and
                 not (CONF.libvirt.uid_maps and CONF.libvirt.gid_maps)):
             LOG.warning("Running libvirt-lxc without user namespaces is "
@@ -919,7 +905,7 @@ class LibvirtDriver(driver.ComputeDriver):
 
         supports_maxphysaddr = self._host.has_min_version(
             lv_ver=MIN_LIBVIRT_MAXPHYSADDR,
-            hv_ver=MIN_QEMU_MAXPHYSADDR,
+            hv_ver=MIN_QEMU_VERSION,
             hv_type=host.HV_DRIVER_QEMU,
         )
 
@@ -1194,35 +1180,6 @@ class LibvirtDriver(driver.ComputeDriver):
         # See https://bugzilla.redhat.com/show_bug.cgi?id=1376907 for ref.
         return os.path.exists('/sys/bus/mdev/devices/{0}'.format(uuid))
 
-    def _recreate_assigned_mediated_devices(self):
-        """Recreate assigned mdevs that could have disappeared if we reboot
-        the host.
-        """
-        # NOTE(sbauza): This method just calls sysfs to recreate mediated
-        # devices by looking up existing guest XMLs and doesn't use
-        # the Placement API so it works with or without a vGPU reshape.
-        mdevs = self._get_all_assigned_mediated_devices()
-        for (mdev_uuid, instance_uuid) in mdevs.items():
-            if not self._is_existing_mdev(mdev_uuid):
-                dev_name = libvirt_utils.mdev_uuid2name(mdev_uuid)
-                dev_info = self._get_mediated_device_information(dev_name)
-                parent = dev_info['parent']
-                parent_type = self._get_vgpu_type_per_pgpu(parent)
-                if dev_info['type'] != parent_type:
-                    # NOTE(sbauza): The mdev was created by using a different
-                    # vGPU type. We can't recreate the mdev until the operator
-                    # modifies the configuration.
-                    parent = "{}:{}:{}.{}".format(*parent[4:].split('_'))
-                    msg = ("The instance UUID %(inst)s uses a mediated device "
-                           "type %(type)s that is no longer supported by the "
-                           "parent PCI device, %(parent)s. Please correct "
-                           "the configuration accordingly." %
-                           {'inst': instance_uuid,
-                            'parent': parent,
-                            'type': dev_info['type']})
-                    raise exception.InvalidLibvirtMdevConfig(reason=msg)
-                self._create_new_mediated_device(parent, uuid=mdev_uuid)
-
     def _check_my_ip(self):
         ips = compute_utils.get_machine_ips()
         if CONF.my_ip not in ips:
@@ -1293,19 +1250,6 @@ class LibvirtDriver(driver.ComputeDriver):
                 "'vcpu_pin_set' config option value to '[compute] "
                 "cpu_shared_set' and '[compute] cpu_dedicated_set', "
                 "respectively, and undefine 'vcpu_pin_set'.")
-
-    def _supports_tb_cache_size(self):
-        if (
-            CONF.libvirt.virt_type == 'qemu' and
-            CONF.libvirt.tb_cache_size and
-            CONF.libvirt.tb_cache_size > 0
-        ):
-            if not self._host.has_min_version(MIN_LIBVIRT_TB_CACHE_SIZE):
-                raise exception.InvalidConfiguration(
-                    _("Nova requires libvirt version %s or greater "
-                      "with '[libvirt] tb_cache_size' "
-                      "configured.") %
-                    libvirt_utils.version_to_string(MIN_LIBVIRT_TB_CACHE_SIZE))
 
     def _prepare_migration_flags(self):
         migration_flags = 0
@@ -8987,12 +8931,8 @@ class LibvirtDriver(driver.ComputeDriver):
                 # We need the PCI address, not the libvirt name
                 # The libvirt name is like 'pci_0000_84_00_0'
                 pci_addr = "{}:{}:{}.{}".format(*dev_name[4:].split('_'))
-                if not self._host.has_min_version(MIN_LIBVIRT_PERSISTENT_MDEV):
-                    chosen_mdev = nova.privsep.libvirt.create_mdev(
-                        pci_addr, dev_supported_type, uuid=uuid)
-                else:
-                    chosen_mdev = self._create_mdev(
-                        dev_name, dev_supported_type, uuid=uuid)
+                chosen_mdev = self._create_mdev(
+                    dev_name, dev_supported_type, uuid=uuid)
                 LOG.info('Created mdev: %s on pGPU: %s.',
                          chosen_mdev, pci_addr)
                 return chosen_mdev

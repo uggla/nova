@@ -192,18 +192,6 @@ def readpty(path):
 
 
 @nova.privsep.sys_admin_pctxt.entrypoint
-def create_mdev(physical_device, mdev_type, uuid=None):
-    """Instantiate a mediated device."""
-    if uuid is None:
-        uuid = uuidutils.generate_uuid()
-    fpath = '/sys/class/mdev_bus/{0}/mdev_supported_types/{1}/create'
-    fpath = fpath.format(physical_device, mdev_type)
-    with open(fpath, 'w') as f:
-        f.write(uuid)
-    return uuid
-
-
-@nova.privsep.sys_admin_pctxt.entrypoint
 def systemd_run_qb_mount(qb_vol, mnt_base, cfg_file=None):
     """Mount QB volume in separate CGROUP"""
     # Note(kaisers): Details on why we run without --user at bug #1756823

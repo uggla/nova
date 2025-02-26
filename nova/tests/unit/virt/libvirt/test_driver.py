@@ -22287,7 +22287,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                            libvirt_driver.MIN_LIBVIRT_MAXPHYSADDR))
     @mock.patch.object(fakelibvirt.Connection, 'getVersion',
                        return_value=versionutils.convert_version_to_int(
-                           libvirt_driver.MIN_QEMU_MAXPHYSADDR))
+                           libvirt_driver.MIN_QEMU_VERSION))
     @mock.patch.object(fakelibvirt.Connection, 'getType',
                        return_value=host.HV_DRIVER_QEMU)
     def test_update_host_specific_capabilities_with_maxphysaddr(
@@ -22324,7 +22324,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                            libvirt_driver.MIN_LIBVIRT_MAXPHYSADDR))
     @mock.patch.object(fakelibvirt.Connection, 'getVersion',
                        return_value=versionutils.convert_version_to_int(
-                           libvirt_driver.MIN_QEMU_MAXPHYSADDR) - 1)
+                           libvirt_driver.MIN_QEMU_VERSION) - 1)
     @mock.patch.object(fakelibvirt.Connection, 'getType',
                        return_value=host.HV_DRIVER_QEMU)
     def test_update_host_specific_capabilities_without_maxphysaddr(
@@ -22338,7 +22338,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
 
     @mock.patch.object(fakelibvirt.Connection, 'getLibVersion',
                        return_value=versionutils.convert_version_to_int(
-                           libvirt_driver.MIN_LIBVIRT_TB_CACHE_SIZE) - 1)
+                           libvirt_driver.MIN_LIBVIRT_VERSION) - 1)
     def test_supports_tb_cache_size_fail(self, mock_getversion):
         self.flags(virt_type='qemu', group='libvirt')
         self.flags(tb_cache_size=10, group='libvirt')
@@ -22352,7 +22352,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
                        new=mock.Mock())
     @mock.patch.object(fakelibvirt.Connection, 'getLibVersion',
                        return_value=versionutils.convert_version_to_int(
-                           libvirt_driver.MIN_LIBVIRT_TB_CACHE_SIZE))
+                           libvirt_driver.MIN_LIBVIRT_VERSION))
     def test_supports_tb_cache_size_ok(self, mock_getversion):
         self.flags(virt_type='qemu', group='libvirt')
         self.flags(tb_cache_size=10, group='libvirt')
@@ -22361,7 +22361,7 @@ class LibvirtConnTestCase(test.NoDBTestCase,
 
     @mock.patch.object(fakelibvirt.Connection, 'getLibVersion',
                        return_value=versionutils.convert_version_to_int(
-                            libvirt_driver.MIN_LIBVIRT_TB_CACHE_SIZE))
+                            libvirt_driver.MIN_LIBVIRT_VERSION))
     def test_get_guest_config_feature_tcg(self, mock_getversion):
         self.flags(virt_type='qemu', group='libvirt')
         self.flags(tb_cache_size=10, group='libvirt')
